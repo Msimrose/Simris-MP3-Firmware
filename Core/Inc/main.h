@@ -73,8 +73,6 @@ void Error_Handler(void);
 #define JACK_DET_Pin GPIO_PIN_5
 #define JACK_DET_GPIO_Port GPIOC
 #define JACK_DET_EXTI_IRQn EXTI9_5_IRQn
-#define PWR_SW_SENSE_Pin GPIO_PIN_7
-#define PWR_SW_SENSE_GPIO_Port GPIOE
 #define BTN_NEXT_Pin GPIO_PIN_8
 #define BTN_NEXT_GPIO_Port GPIOE
 #define BTN_NEXT_EXTI_IRQn EXTI9_5_IRQn
@@ -104,16 +102,16 @@ void Error_Handler(void);
 #define PMIC_EN_GPIO_Port GPIOD
 #define PMIC_CTRL_Pin GPIO_PIN_10
 #define PMIC_CTRL_GPIO_Port GPIOD
-#define DISP_RST_Pin GPIO_PIN_13
+#define DISP_RST_Pin GPIO_PIN_14
 #define DISP_RST_GPIO_Port GPIOD
-#define N_BTN_Pin GPIO_PIN_15
-#define N_BTN_GPIO_Port GPIOD
-#define N_BTN_EXTI_IRQn EXTI15_10_IRQn
 #define SD_CD_Pin GPIO_PIN_6
 #define SD_CD_GPIO_Port GPIOC
 #define SD_CD_EXTI_IRQn EXTI9_5_IRQn
 #define USB_PHY_RST_Pin GPIO_PIN_11
 #define USB_PHY_RST_GPIO_Port GPIOA
+#define PWR_SW_SENSE_Pin GPIO_PIN_0
+#define PWR_SW_SENSE_GPIO_Port GPIOD
+#define PWR_SW_SENSE_EXTI_IRQn EXTI0_IRQn
 
 /* USER CODE BEGIN Private defines */
 
