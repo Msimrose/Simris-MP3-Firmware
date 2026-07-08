@@ -11,9 +11,12 @@ CMake project are **done** — your job is the **application**.
    plan (§12)**, and per-phase pass/fail tests. **START HERE.**
 2. **`software-ui-spec.md`** — app architecture + UI behavior. Pins are stubbed behind a HAL; the app
    handles *named events* ("Next pressed"), never pin numbers. Includes the **album carousel**.
-3. **`brand-ui-system.md`** — the visual language: **monochrome, landscape 600×450**, ABC Favorit Light,
+3. **`brand-ui-system.md`** — the visual language: **monochrome, landscape 600×450**, ABC Diatype,
    Phosphor icons, dynamic battery. Only album art + battery get color.
-4. **`mcu-pinout.md`** — pin reference (the *authoritative* pins are in `MP3_Firmware.ioc`).
+4. **`asset-pipeline.md`** — how to bring the fonts/icons/images into LVGL: `lv_font_conv` recipes,
+   Phosphor icon-font build, brand color tokens as LVGL styles, the **desktop simulator** target,
+   and where assets live (flash vs eMMC). Read before Phase 5–6.
+5. **`mcu-pinout.md`** — pin reference (the *authoritative* pins are in `MP3_Firmware.ioc`).
 
 ## 1. What's already done — DO NOT redo
 - **CubeMX config** (in `MP3_Firmware.ioc`): all peripherals, pins, EXTI, NVIC.

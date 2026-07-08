@@ -29,9 +29,12 @@ Don't over-design it — the interface is a frame for the music, never the star.
      The one status allowed to shout. *(The physical white LED bar can mirror battery as segments too.)*
 
 ## Typography
-- **ABC Favorit Light** — one weight, everywhere. A heavier cut only for a now-playing title.
-- **Mono** (system) for data: times, format badges, small labels.
-- Quiet, spacious, confident. Give it room; don't crowd it.
+- **ABC Diatype (Variable)** — a clean neo-grotesque. Bake a **Regular** cut for menus/body and a
+  slightly heavier **Medium** cut for the now-playing title. (Variable font → on-device it's static
+  cuts; the MCU doesn't interpolate axes.) Quiet, spacious, confident — give it room.
+- **Mono** for data: times, format badges, small labels.
+- ⚠️ **License:** the **"Edu"** cut is educational-only — fine for the build, **not for sale**. Swap
+  a licensed commercial Diatype cut before shipping. See `asset-pipeline.md` §1 for the full pipeline.
 
 ## Screens (all landscape)
 - **Boot:** logo placeholder → menu. *(Logo added later — never a build/boot blocker.)*
@@ -54,7 +57,7 @@ crisp and are fine for a commercial product:
 
 | Set | License | Why |
 |---|---|---|
-| **Phosphor Icons** | **MIT** | Top pick. 9,000+ icons, 6 weights incl. **Thin / Light** — pairs perfectly with ABC Favorit Light. phosphoricons.com |
+| **Phosphor Icons** | **MIT** | Top pick. 9,000+ icons, 6 weights incl. **Thin / Light** — pairs perfectly with ABC Diatype. phosphoricons.com |
 | **Lucide** | ISC | Clean, consistent, UI-first (Feather's successor). lucide.dev |
 | **Tabler Icons** | MIT | 5,000+ outline icons, very even stroke. tabler.io/icons |
 | **Material Symbols** | Apache 2.0 | Google; variable weight + fill, huge coverage. |
