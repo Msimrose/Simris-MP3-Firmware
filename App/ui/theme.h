@@ -18,7 +18,12 @@
 LV_FONT_DECLARE(diatype_regular_22); /* menu rows / body        */
 LV_FONT_DECLARE(diatype_regular_24); /* now-playing artist/album */
 LV_FONT_DECLARE(diatype_medium_32);  /* now-playing title        */
-LV_FONT_DECLARE(scotch_mono_16);     /* times / format badges (trial mono) */
+LV_FONT_DECLARE(scotch_mono_16);     /* data-font candidates under trial:  */
+LV_FONT_DECLARE(slab_mono_16);       /*   times, format badges, battery %  */
+LV_FONT_DECLARE(diatype_regular_16);
+
+/* The currently selected data font (see theme.c; sim: --datafont flag) */
+extern const lv_font_t *pact_font_data;
 
 /* Motion: snap, ease, done. */
 #define PACT_ANIM_MS 180

@@ -57,7 +57,7 @@ static void battery_create(lv_obj_t *parent)
     lv_obj_set_style_radius(batt_fill, 1, 0);
 
     batt_label = lv_label_create(parent);
-    lv_obj_set_style_text_font(batt_label, &scotch_mono_16, 0);
+    lv_obj_set_style_text_font(batt_label, pact_font_data, 0);
     lv_obj_set_style_text_color(batt_label, PACT_COL_TEXT_DIM, 0);
     lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 }
@@ -128,7 +128,7 @@ void ui_init(void)
     /* wordmark, quiet, top-left */
     lv_obj_t *mark = lv_label_create(scr);
     lv_label_set_text(mark, "PACT");
-    lv_obj_set_style_text_font(mark, &scotch_mono_16, 0);
+    lv_obj_set_style_text_font(mark, pact_font_data, 0);
     lv_obj_set_style_text_color(mark, PACT_COL_TEXT_DIM, 0);
     lv_obj_set_style_text_letter_space(mark, 3, 0);
     lv_obj_align(mark, LV_ALIGN_TOP_LEFT, MENU_PAD_X, 20);

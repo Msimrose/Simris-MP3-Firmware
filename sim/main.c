@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../App/ui/ui.h"
+#include "../App/ui/theme.h"
 
 static int write_bmp(const char *path, const lv_draw_buf_t *buf)
 {
@@ -44,7 +45,16 @@ static int write_bmp(const char *path, const lv_draw_buf_t *buf)
 int main(int argc, char **argv)
 {
     const char *shot_path = NULL;
-    if (argc >= 3 && strcmp(argv[1], "--shot") == 0) shot_path = argv[2];
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "--shot") == 0) shot_path = argv[i + 1];
+        if (strcmp(argv[i], "--datafont") == 0) {
+            const char *f = argv[i + 1];
+            if      (strcmp(f, "scotch")  == 0) pact_font_data = &scotch_mono_16;
+            else if (strcmp(f, "slab")    == 0) pact_font_data = &slab_mono_16;
+            else if (strcmp(f, "diatype") == 0) pact_font_data = &diatype_regular_16;
+            else { fprintf(stderr, "unknown --datafont %s\n", f); return 1; }
+        }
+    }
 
     lv_init();
     lv_tick_set_cb(SDL_GetTicks);
