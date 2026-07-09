@@ -29,3 +29,8 @@ target_include_directories(decode_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../App
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
 target_link_libraries(decode_test PRIVATE m pthread)
+
+# Library scanner test harness (headless)
+file(GLOB APP_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
+add_executable(library_test library_test.c ${APP_LIB_SRC})
+target_include_directories(library_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../App)
