@@ -92,12 +92,11 @@ void ui_show_albums(void)
         lv_obj_set_style_pad_left(row, 8, 0);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
-        const char *art = ui_art_provider ? ui_art_provider(i) : NULL;
+        const char *art = ui_art_provider ? ui_art_provider(i, 56) : NULL;
         if (art) {
             lv_obj_t *cov = lv_image_create(row);
             lv_image_set_src(cov, art);
             lv_obj_set_size(cov, 56, 56);
-            lv_image_set_inner_align(cov, LV_IMAGE_ALIGN_STRETCH);
             lv_obj_align(cov, LV_ALIGN_LEFT_MID, 0, 0);
             lv_obj_set_style_radius(cov, 4, 0);
             lv_obj_set_style_clip_corner(cov, true, 0);
@@ -186,12 +185,11 @@ void ui_show_tracks(size_t album_idx)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     /* header: cover + album + artist */
-    const char *art = ui_art_provider ? ui_art_provider(album_idx) : NULL;
+    const char *art = ui_art_provider ? ui_art_provider(album_idx, 64) : NULL;
     if (art) {
         lv_obj_t *cov = lv_image_create(scr);
         lv_image_set_src(cov, art);
         lv_obj_set_size(cov, 64, 64);
-        lv_image_set_inner_align(cov, LV_IMAGE_ALIGN_STRETCH);
         lv_obj_align(cov, LV_ALIGN_TOP_LEFT, PAD_X, 16);
         lv_obj_set_style_radius(cov, 4, 0);
         lv_obj_set_style_clip_corner(cov, true, 0);

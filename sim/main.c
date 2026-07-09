@@ -98,7 +98,7 @@ static void sim_play(const char *path)
 
 static library_t lib;
 
-static const char *sim_album_art(size_t album_idx)
+static const char *sim_album_art(size_t album_idx, int px)
 {
     static char lv_path[512];
     if (album_idx >= lib.album_count) return NULL;
@@ -109,15 +109,15 @@ static const char *sim_album_art(size_t album_idx)
     mkdir("/tmp/pact_art", 0755);
     char full[512], thumb[512];
     snprintf(full, sizeof(full), "/tmp/pact_art/%zu.img", album_idx);
-    snprintf(thumb, sizeof(thumb), "/tmp/pact_art/%zu_t.jpg", album_idx);
+    snprintf(thumb, sizeof(thumb), "/tmp/pact_art/%zu_%d.jpg", album_idx, px);
 
     struct stat st;
-    if (stat(thumb, &st) != 0) {  /* build once, then reuse */
-        if (!library_extract_art(tr, full)) return NULL;
+    if (stat(thumb, &st) != 0) {  /* build once per size, then reuse */
+        if (stat(full, &st) != 0 && !library_extract_art(tr, full)) return NULL;
         char cmd[1200];
         snprintf(cmd, sizeof(cmd),
-                 "sips -s format jpeg -Z 128 '%s' --out '%s' >/dev/null 2>&1",
-                 full, thumb);
+                 "sips -s format jpeg -z %d %d '%s' --out '%s' >/dev/null 2>&1",
+                 px, px, full, thumb);
         if (system(cmd) != 0 || stat(thumb, &st) != 0) return NULL;
     }
 
@@ -174,6 +174,10 @@ int main(int argc, char **argv)
             else { fprintf(stderr, "unknown --datafont %s\n", f); return 1; }
         }
     }
+
+    /* Retina: scale the 600x450 framebuffer with nearest-neighbor so the
+     * window stays pixel-crisp instead of bilinear-fuzzy. */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
 
     lv_init();
     lv_tick_set_cb(SDL_GetTicks);

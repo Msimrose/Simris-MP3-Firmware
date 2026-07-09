@@ -4,10 +4,10 @@
 #include "../input/input_events.h"
 #include "../library/library.h"
 
-/* Returns an LVGL image source for an album's cover (e.g. "A:/path/thumb.jpg")
- * or NULL if the album has no art. The provider owns the returned string
- * until the next call. */
-typedef const char *(*ui_art_provider_t)(size_t album_idx);
+/* Returns an LVGL image source for an album's cover, pre-scaled to exactly
+ * px * px (e.g. "A:/path/thumb_56.jpg"), or NULL if the album has no art.
+ * The provider owns the returned string until the next call. */
+typedef const char *(*ui_art_provider_t)(size_t album_idx, int px);
 
 void        ui_init(void);
 lv_group_t *ui_group(void);           /* input group the keypad indev feeds  */
