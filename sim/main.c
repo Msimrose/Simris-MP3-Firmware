@@ -1,27 +1,38 @@
 /*
  * Pact MP-1 - desktop simulator (SDL2).
  *
- * Renders the real UI at 600x450 in a window. Keys stand in for the hardware:
- *   arrows        = wheel (up/left CCW, down/right CW)
- *   enter         = center press
- * `--shot out.bmp` renders ~0.7 s then writes a screenshot and exits
- * (used for automated visual checks).
+ * Renders the real UI at 600x450 and plays real audio through the real
+ * engine. Keys stand in for the hardware:
+ *   arrows        = wheel
+ *   enter         = center press (select / play)
+ *   esc/backspace = menu-top button (back)
+ *
+ * Flags:
+ *   --library <dir>   music folder to scan (default /tmp/pact-demo)
+ *   --play <file>     start playing a file immediately
+ *   --datafont scotch|slab|diatype
+ *   --shot <out.bmp>  render ~0.7 s, save screenshot, exit
+ *   --screen albums   with --shot: jump to a screen first
  */
 #include "lvgl.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "../App/ui/ui.h"
 #include "../App/ui/theme.h"
 #include "../App/audio/audio_engine.h"
 #include "../App/audio/pcm_ring.h"
+#include "../App/library/library.h"
 
-/* ---- audio output: SDL stands in for the SAI DMA ring consumer ---- */
+/* ---- audio output: SDL stands in for the SAI DMA ring consumer ---------- */
 
 #define SIM_RING_FRAMES 16384  /* ~370 ms at 44.1 kHz */
-static int32_t    ring_storage[SIM_RING_FRAMES * 2];
-static pcm_ring_t ring;
+static int32_t           ring_storage[SIM_RING_FRAMES * 2];
+static pcm_ring_t        ring;
+static SDL_AudioDeviceID adev;
+static int               adev_rate;
 
 static void sdl_audio_cb(void *ud, Uint8 *stream, int len)
 {
@@ -41,38 +52,80 @@ static int pump_thread(void *ud)
     return 0;
 }
 
-static bool start_playback(const char *path)
+static void audio_init_once(void)
 {
-    audio_engine_init(&ring);
+    static bool done;
+    if (done) return;
+    done = true;
     pcm_ring_init(&ring, ring_storage, SIM_RING_FRAMES);
+    audio_engine_init(&ring);
+    SDL_InitSubSystem(SDL_INIT_AUDIO);
+    SDL_CreateThread(pump_thread, "audio_pump", NULL);
+}
+
+/* Play a track; reopen the output device if the sample rate changed
+ * (the sim equivalent of switching the SAI kernel PLL per track). */
+static void sim_play(const char *path)
+{
+    audio_init_once();
     if (!audio_engine_play(path)) {
         fprintf(stderr, "cannot open %s\n", path);
-        return false;
+        return;
     }
     const audio_fmt_t *fmt = audio_engine_fmt();
-    printf("playing: %s (%u Hz, %u ch, %u bit)\n", path,
-           fmt->sample_rate, fmt->channels, fmt->bits_per_sample);
+    printf("playing: %s (%u Hz, %u bit)\n", path, fmt->sample_rate,
+           fmt->bits_per_sample);
 
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
-        fprintf(stderr, "SDL audio init: %s\n", SDL_GetError());
-        return false;
+    if (!adev || adev_rate != (int)fmt->sample_rate) {
+        if (adev) SDL_CloseAudioDevice(adev);
+        SDL_AudioSpec want = {0}, have;
+        want.freq = (int)fmt->sample_rate;
+        want.format = AUDIO_S32SYS;
+        want.channels = 2;
+        want.samples = 1024;
+        want.callback = sdl_audio_cb;
+        adev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+        adev_rate = (int)fmt->sample_rate;
+        if (!adev) {
+            fprintf(stderr, "audio device: %s\n", SDL_GetError());
+            return;
+        }
     }
-
-    SDL_AudioSpec want = {0}, have;
-    want.freq = (int)fmt->sample_rate;   /* native rate, no resampling */
-    want.format = AUDIO_S32SYS;
-    want.channels = 2;
-    want.samples = 1024;
-    want.callback = sdl_audio_cb;
-    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-    if (!dev) {
-        fprintf(stderr, "audio device: %s\n", SDL_GetError());
-        return false;
-    }
-    SDL_CreateThread(pump_thread, "audio_pump", NULL);
-    SDL_PauseAudioDevice(dev, 0);
-    return true;
+    SDL_PauseAudioDevice(adev, 0);
 }
+
+/* ---- album art provider: extract + thumbnail to /tmp/pact_art ----------- */
+
+static library_t lib;
+
+static const char *sim_album_art(size_t album_idx)
+{
+    static char lv_path[512];
+    if (album_idx >= lib.album_count) return NULL;
+
+    const track_t *tr = &lib.tracks[lib.albums[album_idx].first];
+    if (tr->t.art_kind == ART_NONE) return NULL;
+
+    mkdir("/tmp/pact_art", 0755);
+    char full[512], thumb[512];
+    snprintf(full, sizeof(full), "/tmp/pact_art/%zu.img", album_idx);
+    snprintf(thumb, sizeof(thumb), "/tmp/pact_art/%zu_t.jpg", album_idx);
+
+    struct stat st;
+    if (stat(thumb, &st) != 0) {  /* build once, then reuse */
+        if (!library_extract_art(tr, full)) return NULL;
+        char cmd[1200];
+        snprintf(cmd, sizeof(cmd),
+                 "sips -s format jpeg -Z 128 '%s' --out '%s' >/dev/null 2>&1",
+                 full, thumb);
+        if (system(cmd) != 0 || stat(thumb, &st) != 0) return NULL;
+    }
+
+    snprintf(lv_path, sizeof(lv_path), "A:%s", thumb);
+    return lv_path;
+}
+
+/* ---- screenshot (--shot) ------------------------------------------------ */
 
 static int write_bmp(const char *path, const lv_draw_buf_t *buf)
 {
@@ -105,9 +158,14 @@ int main(int argc, char **argv)
 {
     const char *shot_path = NULL;
     const char *play_path = NULL;
+    const char *lib_dir = "/tmp/pact-demo";
+    const char *jump_screen = NULL;
+
     for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], "--shot") == 0) shot_path = argv[i + 1];
-        if (strcmp(argv[i], "--play") == 0) play_path = argv[i + 1];
+        if (strcmp(argv[i], "--shot") == 0)    shot_path = argv[i + 1];
+        if (strcmp(argv[i], "--play") == 0)    play_path = argv[i + 1];
+        if (strcmp(argv[i], "--library") == 0) lib_dir = argv[i + 1];
+        if (strcmp(argv[i], "--screen") == 0)  jump_screen = argv[i + 1];
         if (strcmp(argv[i], "--datafont") == 0) {
             const char *f = argv[i + 1];
             if      (strcmp(f, "scotch")  == 0) pact_font_data = &scotch_mono_16;
@@ -124,11 +182,24 @@ int main(int argc, char **argv)
     lv_sdl_window_set_title(disp, "Pact MP-1");
     lv_indev_t *kb = lv_sdl_keyboard_create();
 
+    library_scan(&lib, lib_dir);
+    printf("library: %zu tracks, %zu albums from %s\n", lib.count,
+           lib.album_count, lib_dir);
+
+    ui_set_library(&lib, sim_album_art);
+    ui_set_on_play(sim_play);
     ui_init();
     lv_indev_set_group(kb, ui_group());
     lv_group_focus_next(ui_group());
 
-    if (play_path && !start_playback(play_path)) return 1;
+    if (jump_screen && lib.album_count) {
+        ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu: Now Playing -> Albums */
+        ui_handle_event(PACT_EVT_CENTER);     /* enter Albums */
+        if (strcmp(jump_screen, "tracks") == 0)
+            ui_handle_event(PACT_EVT_CENTER); /* open first album */
+    }
+
+    if (play_path) sim_play(play_path);
 
     uint32_t start = SDL_GetTicks();
     while (1) {

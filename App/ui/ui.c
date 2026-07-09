@@ -1,31 +1,73 @@
 /*
- * Pact MP-1 - UI skeleton: main menu (landscape 600x450).
+ * Pact MP-1 - UI core: navigation plumbing + main menu (landscape 600x450).
  *
  * Brand rules (docs/brand-ui-system.md): true-black ground, warm-white type,
  * no accent color, selection is a subtle grey fill, battery is the only
  * element allowed color (red under 15%).
  */
-#include "ui.h"
-#include "theme.h"
+#include "ui_internal.h"
 
 #define MENU_ROW_H   46
 #define MENU_PAD_X   48
+
+const library_t   *ui_lib;
+ui_art_provider_t  ui_art_provider;
+void             (*ui_on_play)(const char *path);
+ui_screen_id_t     ui_cur_screen = UI_SCR_MENU;
+
+static lv_group_t *group;
 
 static const char *menu_items[] = {
     "Now Playing", "Albums", "Artists", "Songs", "Folders", "Playlists", "Settings",
 };
 #define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
+#define MENU_IDX_ALBUMS 1
 
-static lv_group_t *group;
-static lv_obj_t   *menu_rows[MENU_COUNT];
-static lv_obj_t   *menu_labels[MENU_COUNT];
-static int         menu_sel;
+static lv_obj_t *menu_rows[MENU_COUNT];
+static lv_obj_t *menu_labels[MENU_COUNT];
+static int       menu_sel;
 
-static lv_obj_t *batt_shell;
-static lv_obj_t *batt_fill;
-static lv_obj_t *batt_label;
+static lv_obj_t *batt_shell, *batt_fill, *batt_label;
+static int       batt_pct = 84;
+static bool      batt_chg = false;
 
-/* ---- battery (dynamic: proportional fill, red <15%, per brand doc) ---- */
+/* ---- key plumbing ------------------------------------------------------ */
+
+static void key_cb(lv_event_t *e)
+{
+    uint32_t key = lv_event_get_key(e);
+    pact_event_t evt = PACT_EVT_NONE;
+    switch (key) {
+    case LV_KEY_DOWN:
+    case LV_KEY_RIGHT:     evt = PACT_EVT_WHEEL_CW;  break;
+    case LV_KEY_UP:
+    case LV_KEY_LEFT:      evt = PACT_EVT_WHEEL_CCW; break;
+    case LV_KEY_ENTER:     evt = PACT_EVT_CENTER;    break;
+    case LV_KEY_ESC:
+    case LV_KEY_BACKSPACE: evt = PACT_EVT_UP;        break; /* menu/back */
+    default: return;
+    }
+    ui_handle_event(evt);
+}
+
+void ui_bind_keys(lv_obj_t *obj)
+{
+    lv_group_remove_all_objs(group);
+    lv_group_add_obj(group, obj);
+    lv_obj_add_event_cb(obj, key_cb, LV_EVENT_KEY, NULL);
+    lv_group_focus_obj(obj);
+}
+
+void ui_handle_event(pact_event_t evt)
+{
+    switch (ui_cur_screen) {
+    case UI_SCR_MENU:   ui_menu_event(evt);   break;
+    case UI_SCR_ALBUMS: ui_albums_event(evt); break;
+    case UI_SCR_TRACKS: ui_tracks_event(evt); break;
+    }
+}
+
+/* ---- battery (dynamic: proportional fill, red <15%, per brand doc) ----- */
 
 static void battery_create(lv_obj_t *parent)
 {
@@ -39,7 +81,6 @@ static void battery_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(batt_shell, 2, 0);
     lv_obj_clear_flag(batt_shell, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* nub */
     lv_obj_t *nub = lv_obj_create(parent);
     lv_obj_set_size(nub, 3, 8);
     lv_obj_align_to(nub, batt_shell, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
@@ -59,21 +100,22 @@ static void battery_create(lv_obj_t *parent)
     batt_label = lv_label_create(parent);
     lv_obj_set_style_text_font(batt_label, pact_font_data, 0);
     lv_obj_set_style_text_color(batt_label, PACT_COL_TEXT_DIM, 0);
-    lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
+    ui_set_battery(batt_pct, batt_chg);
 }
 
 void ui_set_battery(int percent, bool charging)
 {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    lv_obj_set_width(batt_fill, lv_pct(percent));
+    batt_pct = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+    batt_chg = charging;
+    if (!batt_fill) return;
+    lv_obj_set_width(batt_fill, lv_pct(batt_pct));
     lv_obj_set_style_bg_color(batt_fill,
-                              percent < 15 ? PACT_COL_BATT_LOW : PACT_COL_WHITE, 0);
-    lv_label_set_text_fmt(batt_label, charging ? "%d%% +" : "%d%%", percent);
+                              batt_pct < 15 ? PACT_COL_BATT_LOW : PACT_COL_WHITE, 0);
+    lv_label_set_text_fmt(batt_label, batt_chg ? "%d%% +" : "%d%%", batt_pct);
     lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 }
 
-/* ---- menu ---- */
+/* ---- main menu --------------------------------------------------------- */
 
 static void menu_paint_selection(void)
 {
@@ -86,46 +128,30 @@ static void menu_paint_selection(void)
     lv_obj_scroll_to_view(menu_rows[menu_sel], LV_ANIM_ON);
 }
 
-static void menu_move(int dir)
-{
-    menu_sel += dir;
-    if (menu_sel < 0) menu_sel = 0;
-    if (menu_sel >= MENU_COUNT) menu_sel = MENU_COUNT - 1;
-    menu_paint_selection();
-}
-
-void ui_handle_event(pact_event_t evt)
+void ui_menu_event(pact_event_t evt)
 {
     switch (evt) {
-    case PACT_EVT_WHEEL_CW:  menu_move(+1); break;
-    case PACT_EVT_WHEEL_CCW: menu_move(-1); break;
-    case PACT_EVT_CENTER:    /* select: screens beyond the menu come next */ break;
+    case PACT_EVT_WHEEL_CW:
+        if (menu_sel < MENU_COUNT - 1) { menu_sel++; menu_paint_selection(); }
+        break;
+    case PACT_EVT_WHEEL_CCW:
+        if (menu_sel > 0) { menu_sel--; menu_paint_selection(); }
+        break;
+    case PACT_EVT_CENTER:
+        if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count)
+            ui_show_albums();
+        break;
     default: break;
     }
 }
 
-/* LVGL keypad plumbing -> semantic events (device uses the same path:
- * hal feeds LV_KEY_* from buttons/wheel; the app only sees pact_event_t). */
-static void menu_key_cb(lv_event_t *e)
+void ui_show_menu(void)
 {
-    uint32_t key = lv_event_get_key(e);
-    switch (key) {
-    case LV_KEY_DOWN:
-    case LV_KEY_RIGHT: ui_handle_event(PACT_EVT_WHEEL_CW);  break;
-    case LV_KEY_UP:
-    case LV_KEY_LEFT:  ui_handle_event(PACT_EVT_WHEEL_CCW); break;
-    case LV_KEY_ENTER: ui_handle_event(PACT_EVT_CENTER);    break;
-    default: break;
-    }
-}
-
-void ui_init(void)
-{
-    lv_obj_t *scr = lv_screen_active();
+    ui_cur_screen = UI_SCR_MENU;
+    lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    /* wordmark, quiet, top-left */
     lv_obj_t *mark = lv_label_create(scr);
     lv_label_set_text(mark, "PACT");
     lv_obj_set_style_text_font(mark, pact_font_data, 0);
@@ -135,7 +161,6 @@ void ui_init(void)
 
     battery_create(scr);
 
-    /* menu list */
     lv_obj_t *list = lv_obj_create(scr);
     lv_obj_set_size(list, 600, 450 - 64);
     lv_obj_align(list, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -167,14 +192,28 @@ void ui_init(void)
         menu_labels[i] = lbl;
     }
 
-    /* input group: one focus holder receives keys, we translate to events */
-    group = lv_group_create();
-    lv_group_add_obj(group, list);
-    lv_obj_add_event_cb(list, menu_key_cb, LV_EVENT_KEY, NULL);
-
-    menu_sel = 0;
     menu_paint_selection();
-    ui_set_battery(84, false);
+    ui_bind_keys(list);
+    lv_screen_load(scr);
+}
+
+/* ---- public API -------------------------------------------------------- */
+
+void ui_set_library(const library_t *lib, ui_art_provider_t art)
+{
+    ui_lib = lib;
+    ui_art_provider = art;
+}
+
+void ui_set_on_play(void (*fn)(const char *path))
+{
+    ui_on_play = fn;
+}
+
+void ui_init(void)
+{
+    group = lv_group_create();
+    ui_show_menu();
 }
 
 lv_group_t *ui_group(void)

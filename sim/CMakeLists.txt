@@ -16,8 +16,9 @@ file(GLOB APP_UI_SRC
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/*.c
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/assets/*.c)
 file(GLOB APP_AUDIO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/audio/*.c)
+file(GLOB APP_LIBRARY_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
 
-add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC})
+add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC} ${APP_LIBRARY_SRC})
 target_include_directories(pact_sim PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../App
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
