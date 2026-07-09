@@ -63,13 +63,53 @@ void ui_bind_keys(lv_obj_t *obj)
     lv_group_focus_obj(obj);
 }
 
+static lv_obj_t *vol_toast;
+static lv_timer_t *vol_toast_timer;
+
+static void vol_toast_expire(lv_timer_t *t)
+{
+    (void)t;
+    if (vol_toast) { lv_obj_delete(vol_toast); vol_toast = NULL; }
+    vol_toast_timer = NULL;
+}
+
+void ui_show_vol_toast(void)
+{
+    if (vol_toast) { lv_obj_delete(vol_toast); vol_toast = NULL; }
+    vol_toast = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(vol_toast, 140, 34);
+    lv_obj_align(vol_toast, LV_ALIGN_BOTTOM_MID, 0, -16);
+    lv_obj_set_style_bg_color(vol_toast, PACT_COL_SELECT, 0);
+    lv_obj_set_style_bg_opa(vol_toast, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(vol_toast, 0, 0);
+    lv_obj_set_style_radius(vol_toast, 8, 0);
+    lv_obj_clear_flag(vol_toast, LV_OBJ_FLAG_SCROLLABLE);
+
+    int v = audio_engine_volume();
+    lv_obj_t *lbl = lv_label_create(vol_toast);
+    if (v == 0) lv_label_set_text(lbl, "muted");
+    else        lv_label_set_text_fmt(lbl, "volume %d", v);
+    lv_obj_set_style_text_font(lbl, &diatype_regular_16, 0);
+    lv_obj_set_style_text_color(lbl, v == 0 ? PACT_COL_BATT_LOW : PACT_COL_TEXT, 0);
+    lv_obj_center(lbl);
+
+    if (vol_toast_timer) lv_timer_delete(vol_toast_timer);
+    vol_toast_timer = lv_timer_create(vol_toast_expire, 1200, NULL);
+    lv_timer_set_repeat_count(vol_toast_timer, 1);
+}
+
+void ui_volume_step(int dir)
+{
+    audio_engine_set_volume(audio_engine_volume() + dir);
+    ui_nowplaying_refresh();
+    ui_show_vol_toast();
+}
+
 void ui_handle_event(pact_event_t evt)
 {
     /* volume works everywhere */
     if (evt == PACT_EVT_VOL_UP || evt == PACT_EVT_VOL_DOWN) {
-        audio_engine_set_volume(audio_engine_volume() +
-                                (evt == PACT_EVT_VOL_UP ? 1 : -1));
-        ui_nowplaying_refresh();
+        ui_volume_step(evt == PACT_EVT_VOL_UP ? 1 : -1);
         return;
     }
     switch (ui_cur_screen) {
@@ -94,6 +134,13 @@ size_t ui_album_of_track(size_t track_idx)
 void ui_play_track(size_t track_idx)
 {
     if (!ui_lib || track_idx >= ui_lib->count) return;
+
+    /* rate-limit: key auto-repeat must not machine-gun track switches */
+    static uint32_t last_switch;
+    uint32_t now = lv_tick_get();
+    if (last_switch && now - last_switch < 350) return;
+    last_switch = now;
+
     ui_current_track = track_idx;
     if (ui_on_play) ui_on_play(ui_lib->tracks[track_idx].path);
     if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();

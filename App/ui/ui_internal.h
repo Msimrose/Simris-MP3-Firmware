@@ -20,7 +20,8 @@ extern ui_screen_id_t     ui_cur_screen;
 extern size_t             ui_current_track;   /* UI_NO_TRACK if none */
 
 size_t ui_album_of_track(size_t track_idx);
-void   ui_play_track(size_t track_idx);       /* play + go to Now Playing */
+void   ui_play_track(size_t track_idx);       /* rate-limited play */
+void   ui_volume_step(int dir);               /* +-1 step, shows toast */
 
 /* Route all keys to obj (single-focus model: one receiver per screen). */
 void ui_bind_keys(lv_obj_t *obj);

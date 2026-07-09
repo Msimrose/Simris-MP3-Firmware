@@ -179,13 +179,24 @@ void ui_show_nowplaying(void)
 void ui_nowplaying_event(pact_event_t evt)
 {
     switch (evt) {
+    case PACT_EVT_WHEEL_CW:   /* wheel on Now Playing = volume (iPod-style) */
+        ui_volume_step(+1);
+        break;
+    case PACT_EVT_WHEEL_CCW:
+        ui_volume_step(-1);
+        break;
     case PACT_EVT_CENTER:
         if (audio_engine_state() == ENGINE_PLAYING) audio_engine_pause();
         else if (audio_engine_state() == ENGINE_PAUSED) audio_engine_resume();
         ui_nowplaying_refresh();
         break;
-    case PACT_EVT_LEFT:   /* previous track in album */
+    case PACT_EVT_LEFT:   /* >3s in: restart track; else previous */
         if (ui_current_track != UI_NO_TRACK) {
+            if (audio_engine_position() > 3.0) {
+                audio_engine_seek(0.0);
+                ui_nowplaying_refresh();
+                break;
+            }
             size_t alb = ui_album_of_track(ui_current_track);
             if (alb != (size_t)-1 && ui_current_track > ui_lib->albums[alb].first)
                 ui_play_track(ui_current_track - 1);
