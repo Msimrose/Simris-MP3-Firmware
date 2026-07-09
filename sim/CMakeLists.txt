@@ -15,7 +15,17 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 file(GLOB APP_UI_SRC
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/*.c
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/assets/*.c)
+file(GLOB APP_AUDIO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/audio/*.c)
 
-add_executable(pact_sim main.c ${APP_UI_SRC})
-target_include_directories(pact_sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../App)
-target_link_libraries(pact_sim PRIVATE lvgl SDL2::SDL2 m)
+add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC})
+target_include_directories(pact_sim PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../App
+    ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
+target_link_libraries(pact_sim PRIVATE lvgl SDL2::SDL2 m pthread)
+
+# Headless decode/verify tool (no SDL, no LVGL)
+add_executable(decode_test decode_test.c ${APP_AUDIO_SRC})
+target_include_directories(decode_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../App
+    ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
+target_link_libraries(decode_test PRIVATE m pthread)

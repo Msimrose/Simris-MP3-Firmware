@@ -14,6 +14,65 @@
 #include <string.h>
 #include "../App/ui/ui.h"
 #include "../App/ui/theme.h"
+#include "../App/audio/audio_engine.h"
+#include "../App/audio/pcm_ring.h"
+
+/* ---- audio output: SDL stands in for the SAI DMA ring consumer ---- */
+
+#define SIM_RING_FRAMES 16384  /* ~370 ms at 44.1 kHz */
+static int32_t    ring_storage[SIM_RING_FRAMES * 2];
+static pcm_ring_t ring;
+
+static void sdl_audio_cb(void *ud, Uint8 *stream, int len)
+{
+    (void)ud;
+    size_t want = (size_t)len / (2 * sizeof(int32_t));
+    size_t got = pcm_ring_read(&ring, (int32_t *)stream, want);
+    if (got < want)  /* underrun: silence, never stale samples */
+        memset(stream + got * 8, 0, (want - got) * 8);
+}
+
+static int pump_thread(void *ud)
+{
+    (void)ud;
+    for (;;) {
+        if (!audio_engine_pump()) SDL_Delay(3);
+    }
+    return 0;
+}
+
+static bool start_playback(const char *path)
+{
+    audio_engine_init(&ring);
+    pcm_ring_init(&ring, ring_storage, SIM_RING_FRAMES);
+    if (!audio_engine_play(path)) {
+        fprintf(stderr, "cannot open %s\n", path);
+        return false;
+    }
+    const audio_fmt_t *fmt = audio_engine_fmt();
+    printf("playing: %s (%u Hz, %u ch, %u bit)\n", path,
+           fmt->sample_rate, fmt->channels, fmt->bits_per_sample);
+
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        fprintf(stderr, "SDL audio init: %s\n", SDL_GetError());
+        return false;
+    }
+
+    SDL_AudioSpec want = {0}, have;
+    want.freq = (int)fmt->sample_rate;   /* native rate, no resampling */
+    want.format = AUDIO_S32SYS;
+    want.channels = 2;
+    want.samples = 1024;
+    want.callback = sdl_audio_cb;
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!dev) {
+        fprintf(stderr, "audio device: %s\n", SDL_GetError());
+        return false;
+    }
+    SDL_CreateThread(pump_thread, "audio_pump", NULL);
+    SDL_PauseAudioDevice(dev, 0);
+    return true;
+}
 
 static int write_bmp(const char *path, const lv_draw_buf_t *buf)
 {
@@ -45,8 +104,10 @@ static int write_bmp(const char *path, const lv_draw_buf_t *buf)
 int main(int argc, char **argv)
 {
     const char *shot_path = NULL;
+    const char *play_path = NULL;
     for (int i = 1; i < argc - 1; i++) {
         if (strcmp(argv[i], "--shot") == 0) shot_path = argv[i + 1];
+        if (strcmp(argv[i], "--play") == 0) play_path = argv[i + 1];
         if (strcmp(argv[i], "--datafont") == 0) {
             const char *f = argv[i + 1];
             if      (strcmp(f, "scotch")  == 0) pact_font_data = &scotch_mono_16;
@@ -66,6 +127,8 @@ int main(int argc, char **argv)
     ui_init();
     lv_indev_set_group(kb, ui_group());
     lv_group_focus_next(ui_group());
+
+    if (play_path && !start_playback(play_path)) return 1;
 
     uint32_t start = SDL_GetTicks();
     while (1) {
