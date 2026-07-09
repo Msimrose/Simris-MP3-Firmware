@@ -156,8 +156,8 @@ void ui_tracks_event(pact_event_t evt)
         if (trk_sel > 0) { trk_sel--; tracks_paint(); }
         break;
     case PACT_EVT_CENTER:
-        if (ui_on_play)
-            ui_on_play(ui_lib->tracks[trk_first + trk_sel].path);
+        ui_play_track(trk_first + trk_sel);
+        ui_show_nowplaying();
         break;
     case PACT_EVT_UP:
         ui_show_albums();

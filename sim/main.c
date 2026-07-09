@@ -220,8 +220,11 @@ int main(int argc, char **argv)
     if (jump_screen && lib.album_count) {
         ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu: Now Playing -> Albums */
         ui_handle_event(PACT_EVT_CENTER);     /* enter Albums */
-        if (strcmp(jump_screen, "tracks") == 0)
+        if (strcmp(jump_screen, "tracks") == 0 ||
+            strcmp(jump_screen, "nowplaying") == 0)
             ui_handle_event(PACT_EVT_CENTER); /* open first album */
+        if (strcmp(jump_screen, "nowplaying") == 0)
+            ui_handle_event(PACT_EVT_CENTER); /* play track 1 -> Now Playing */
     }
 
     if (play_path) sim_play(play_path);

@@ -6,6 +6,7 @@
  * element allowed color (red under 15%).
  */
 #include "ui_internal.h"
+#include "../audio/audio_engine.h"
 
 #define MENU_ROW_H   46
 #define MENU_PAD_X   48
@@ -14,6 +15,7 @@ const library_t   *ui_lib;
 ui_art_provider_t  ui_art_provider;
 void             (*ui_on_play)(const char *path);
 ui_screen_id_t     ui_cur_screen = UI_SCR_MENU;
+size_t             ui_current_track = UI_NO_TRACK;
 
 static lv_group_t *group;
 
@@ -38,13 +40,16 @@ static void key_cb(lv_event_t *e)
     uint32_t key = lv_event_get_key(e);
     pact_event_t evt = PACT_EVT_NONE;
     switch (key) {
-    case LV_KEY_DOWN:
-    case LV_KEY_RIGHT:     evt = PACT_EVT_WHEEL_CW;  break;
-    case LV_KEY_UP:
-    case LV_KEY_LEFT:      evt = PACT_EVT_WHEEL_CCW; break;
+    case LV_KEY_DOWN:      evt = PACT_EVT_WHEEL_CW;  break;
+    case LV_KEY_UP:        evt = PACT_EVT_WHEEL_CCW; break;
+    case LV_KEY_RIGHT:     evt = PACT_EVT_RIGHT;     break; /* next  */
+    case LV_KEY_LEFT:      evt = PACT_EVT_LEFT;      break; /* prev  */
     case LV_KEY_ENTER:     evt = PACT_EVT_CENTER;    break;
     case LV_KEY_ESC:
     case LV_KEY_BACKSPACE: evt = PACT_EVT_UP;        break; /* menu/back */
+    case '=':
+    case '+':              evt = PACT_EVT_VOL_UP;    break;
+    case '-':              evt = PACT_EVT_VOL_DOWN;  break;
     default: return;
     }
     ui_handle_event(evt);
@@ -60,11 +65,62 @@ void ui_bind_keys(lv_obj_t *obj)
 
 void ui_handle_event(pact_event_t evt)
 {
-    switch (ui_cur_screen) {
-    case UI_SCR_MENU:   ui_menu_event(evt);   break;
-    case UI_SCR_ALBUMS: ui_albums_event(evt); break;
-    case UI_SCR_TRACKS: ui_tracks_event(evt); break;
+    /* volume works everywhere */
+    if (evt == PACT_EVT_VOL_UP || evt == PACT_EVT_VOL_DOWN) {
+        audio_engine_set_volume(audio_engine_volume() +
+                                (evt == PACT_EVT_VOL_UP ? 1 : -1));
+        ui_nowplaying_refresh();
+        return;
     }
+    switch (ui_cur_screen) {
+    case UI_SCR_MENU:       ui_menu_event(evt);       break;
+    case UI_SCR_ALBUMS:     ui_albums_event(evt);     break;
+    case UI_SCR_TRACKS:     ui_tracks_event(evt);     break;
+    case UI_SCR_NOWPLAYING: ui_nowplaying_event(evt); break;
+    }
+}
+
+size_t ui_album_of_track(size_t track_idx)
+{
+    if (!ui_lib) return (size_t)-1;
+    for (size_t i = 0; i < ui_lib->album_count; i++) {
+        const album_t *al = &ui_lib->albums[i];
+        if (track_idx >= al->first && track_idx < al->first + al->count)
+            return i;
+    }
+    return (size_t)-1;
+}
+
+void ui_play_track(size_t track_idx)
+{
+    if (!ui_lib || track_idx >= ui_lib->count) return;
+    ui_current_track = track_idx;
+    if (ui_on_play) ui_on_play(ui_lib->tracks[track_idx].path);
+    if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();
+}
+
+/* Half-second player tick: live progress + auto-advance through the album. */
+static void player_tick(lv_timer_t *t)
+{
+    (void)t;
+    static int finish_grace;
+    if (audio_engine_state() == ENGINE_FINISHED &&
+        ui_current_track != UI_NO_TRACK) {
+        /* let the output ring drain (~400 ms) before jumping */
+        if (++finish_grace >= 2) {
+            finish_grace = 0;
+            size_t alb = ui_album_of_track(ui_current_track);
+            if (alb != (size_t)-1 &&
+                ui_current_track + 1 <
+                    ui_lib->albums[alb].first + ui_lib->albums[alb].count) {
+                ui_play_track(ui_current_track + 1);
+                if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();
+            }
+        }
+    } else {
+        finish_grace = 0;
+    }
+    ui_nowplaying_refresh();
 }
 
 /* ---- battery (dynamic: proportional fill, red <15%, per brand doc) ----- */
@@ -140,6 +196,8 @@ void ui_menu_event(pact_event_t evt)
     case PACT_EVT_CENTER:
         if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count)
             ui_show_albums();
+        else if (menu_sel == 0 && ui_current_track != UI_NO_TRACK)
+            ui_show_nowplaying();
         break;
     default: break;
     }
@@ -213,6 +271,7 @@ void ui_set_on_play(void (*fn)(const char *path))
 void ui_init(void)
 {
     group = lv_group_create();
+    lv_timer_create(player_tick, 500, NULL);
     ui_show_menu();
 }
 
