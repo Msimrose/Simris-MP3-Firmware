@@ -151,7 +151,14 @@ int main(void)
   MX_USB_OTG_HS_PCD_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  /* Link probe: keeps the full app (LVGL/UI/decoders) in the image for
+   * honest size budgets; pact_probe_enable is always 0, nothing runs.
+   * Replaced by the real app startup at Phase 1 bring-up. */
+  {
+    extern volatile int pact_probe_enable;
+    extern void pact_link_probe(void);
+    if (pact_probe_enable) pact_link_probe();
+  }
   /* USER CODE END 2 */
 
   /* Init scheduler */

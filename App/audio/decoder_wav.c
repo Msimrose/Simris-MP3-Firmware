@@ -16,13 +16,13 @@ static size_t wav_read(audio_source_t *s, int32_t *out, size_t n)
 {
     wav_impl_t *im = s->impl;
     if (im->w.channels >= 2)
-        return (size_t)drwav_read_pcm_frames_s32(&im->w, n, out);
+        return (size_t)drwav_read_pcm_frames_s32(&im->w, n, (drwav_int32 *)out);
 
     size_t done = 0;
     while (done < n) {
         size_t want = n - done;
         if (want > WAV_MONO_CHUNK) want = WAV_MONO_CHUNK;
-        size_t got = (size_t)drwav_read_pcm_frames_s32(&im->w, want, im->mono);
+        size_t got = (size_t)drwav_read_pcm_frames_s32(&im->w, want, (drwav_int32 *)im->mono);
         for (size_t i = 0; i < got; i++) {
             out[(done + i) * 2 + 0] = im->mono[i];
             out[(done + i) * 2 + 1] = im->mono[i];

@@ -243,6 +243,35 @@ SECTIONS
 
 
 
+  /* ------------------------------------------------------------------ */
+  /* Pact MP-1 user sections (re-add if a CubeMX regen rewrites this file)
+
+     H7 DMA rule (docs/firmware-spec.md section 6): DMA1/2 and SDMMC IDMA
+     cannot reach DTCM. Big CPU-side pools go to AXI (.axi_bss); DMA
+     buffers (PCM ring, SDMMC transfers, LVGL draw buffers) go to D2
+     (.d2_bss), which the MPU will mark non-cacheable at bring-up.       */
+
+  .axi_bss (NOLOAD) :
+  {
+    . = ALIGN(4);
+    _saxi_bss = .;
+    *(.axi_bss)
+    *(.axi_bss*)
+    . = ALIGN(4);
+    _eaxi_bss = .;
+  } >RAM
+
+  .d2_bss (NOLOAD) :
+  {
+    . = ALIGN(32);           /* cache-line alignment for clean/invalidate */
+    _sd2_bss = .;
+    *(.d2_bss)
+    *(.d2_bss*)
+    . = ALIGN(32);
+    _ed2_bss = .;
+  } >RAM_D2
+  /* ------------------------------------------------------------------ */
+
   /* Remove information from the standard libraries */
   /DISCARD/ :
   {

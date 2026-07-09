@@ -1,15 +1,43 @@
 #include "library.h"
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#ifdef PACT_SIM
+#include <dirent.h>
 #include <sys/stat.h>
+#endif
 
 #define INDEX_MAGIC   "PACTIDX\x01"
 #define MAX_DEPTH     12
 
+static void build_albums(library_t *lib)
+{
+    free(lib->albums);
+    lib->albums = NULL;
+    lib->album_count = 0;
+    for (size_t i = 0; i < lib->count; i++) {
+        bool new_album =
+            i == 0 ||
+            strcasecmp(lib->tracks[i].t.album, lib->tracks[i - 1].t.album) != 0;
+        if (new_album) {
+            lib->albums = realloc(lib->albums,
+                                  (lib->album_count + 1) * sizeof(album_t));
+            album_t *al = &lib->albums[lib->album_count++];
+            al->album = lib->tracks[i].t.album;
+            al->artist = lib->tracks[i].t.artist;
+            al->first = i;
+            al->count = 1;
+        } else {
+            lib->albums[lib->album_count - 1].count++;
+        }
+    }
+}
+
 /* ------------------------------ scan ------------------------------------ */
+/* Directory walking is host-only for now; the device scan arrives with the
+ * FatFs port (f_opendir/f_readdir) at storage bring-up. */
+#ifdef PACT_SIM
 
 static bool has_ext(const char *name, const char *ext)
 {
@@ -82,29 +110,6 @@ static int track_cmp(const void *a, const void *b)
     return strcasecmp(ta->path, tb->path);
 }
 
-static void build_albums(library_t *lib)
-{
-    free(lib->albums);
-    lib->albums = NULL;
-    lib->album_count = 0;
-    for (size_t i = 0; i < lib->count; i++) {
-        bool new_album =
-            i == 0 ||
-            strcasecmp(lib->tracks[i].t.album, lib->tracks[i - 1].t.album) != 0;
-        if (new_album) {
-            lib->albums = realloc(lib->albums,
-                                  (lib->album_count + 1) * sizeof(album_t));
-            album_t *al = &lib->albums[lib->album_count++];
-            al->album = lib->tracks[i].t.album;
-            al->artist = lib->tracks[i].t.artist;
-            al->first = i;
-            al->count = 1;
-        } else {
-            lib->albums[lib->album_count - 1].count++;
-        }
-    }
-}
-
 bool library_scan(library_t *lib, const char *root)
 {
     memset(lib, 0, sizeof(*lib));
@@ -114,6 +119,17 @@ bool library_scan(library_t *lib, const char *root)
     build_albums(lib);
     return true;
 }
+
+#else /* device: no filesystem walk until FatFs lands */
+
+bool library_scan(library_t *lib, const char *root)
+{
+    (void)root;
+    memset(lib, 0, sizeof(*lib));
+    return false;
+}
+
+#endif /* PACT_SIM */
 
 /* --------------------------- index save/load ---------------------------- */
 

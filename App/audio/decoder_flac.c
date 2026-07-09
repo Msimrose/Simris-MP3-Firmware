@@ -19,14 +19,14 @@ static size_t flac_read(audio_source_t *s, int32_t *out, size_t n)
     if (im->f->channels >= 2) {
         /* dr_flac interleaves; for >2ch we would need channel folding, but
          * the dispatcher only sees mono/stereo in practice on this device */
-        return (size_t)drflac_read_pcm_frames_s32(im->f, n, out);
+        return (size_t)drflac_read_pcm_frames_s32(im->f, n, (drflac_int32 *)out);
     }
     /* mono: decode then duplicate */
     size_t done = 0;
     while (done < n) {
         size_t want = n - done;
         if (want > MONO_CHUNK) want = MONO_CHUNK;
-        size_t got = (size_t)drflac_read_pcm_frames_s32(im->f, want, im->mono);
+        size_t got = (size_t)drflac_read_pcm_frames_s32(im->f, want, (drflac_int32 *)im->mono);
         for (size_t i = 0; i < got; i++) {
             out[(done + i) * 2 + 0] = im->mono[i];
             out[(done + i) * 2 + 1] = im->mono[i];

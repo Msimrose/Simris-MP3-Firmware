@@ -43,18 +43,28 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Add sources to executable
+file(GLOB_RECURSE LVGL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl/src/*.c)
+file(GLOB APP_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/audio/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/library/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/assets/*.c)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    ${LVGL_SRC}
+    ${APP_SRC}
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
+    ${CMAKE_CURRENT_SOURCE_DIR}/App
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
+    LV_CONF_INCLUDE_SIMPLE
 )
 
 # Remove wrong libob.a library dependency when using cpp files
@@ -63,6 +73,5 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
-
-    # Add user defined libraries
+    m
 )

@@ -577,7 +577,12 @@
 #define LV_ATTRIBUTE_LARGE_CONST
 
 /** Compiler prefix for a large array declaration in RAM */
-#define LV_ATTRIBUTE_LARGE_RAM_ARRAY
+#ifdef PACT_SIM
+    #define LV_ATTRIBUTE_LARGE_RAM_ARRAY
+#else
+    /* keep LVGL's 64K pool out of DTCM (which is nearly full) */
+    #define LV_ATTRIBUTE_LARGE_RAM_ARRAY __attribute__((section(".axi_bss")))
+#endif
 
 /** Place performance critical functions into a faster memory (e.g RAM) */
 #define LV_ATTRIBUTE_FAST_MEM
