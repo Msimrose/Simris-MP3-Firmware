@@ -247,6 +247,28 @@ int main(int argc, char **argv)
 
     if (play_path) sim_play(play_path);
 
+    /* --stress: hammer the navigation graph headlessly until it breaks */
+    if (jump_screen && strcmp(jump_screen, "stress") == 0) {
+        pact_event_t script[] = {
+            PACT_EVT_WHEEL_CW, PACT_EVT_CENTER,            /* menu -> carousel */
+            PACT_EVT_WHEEL_CW, PACT_EVT_WHEEL_CW,
+            PACT_EVT_WHEEL_CCW, PACT_EVT_WHEEL_CW,
+            PACT_EVT_CENTER,                               /* -> tracks */
+            PACT_EVT_WHEEL_CW, PACT_EVT_UP,                /* -> carousel */
+            PACT_EVT_WHEEL_CCW, PACT_EVT_UP,               /* -> menu */
+            PACT_EVT_WHEEL_CCW,
+        };
+        for (int round = 0; round < 25; round++) {
+            for (size_t k = 0; k < sizeof(script) / sizeof(script[0]); k++) {
+                ui_handle_event(script[k]);
+                for (int t = 0; t < 8; t++) { lv_timer_handler(); SDL_Delay(2); }
+            }
+            if ((round % 5) == 0) printf("stress round %d ok\n", round);
+        }
+        printf("stress complete\n");
+        return 0;
+    }
+
     uint32_t start = SDL_GetTicks();
     while (1) {
         lv_timer_handler();

@@ -142,13 +142,11 @@ void ui_show_carousel(void)
     free(covers);
     covers = calloc(count, sizeof(lv_obj_t *));
 
-    /* free the previous visit's decoded covers */
+    /* the previous visit's decoded covers must outlive its screen: stash
+     * them and free only after ui_screen_show() has deleted that screen */
     static size_t bufs_alloc;
-    if (cover_bufs) {
-        for (size_t i = 0; i < bufs_alloc; i++)
-            if (cover_bufs[i]) lv_draw_buf_destroy(cover_bufs[i]);
-        free(cover_bufs);
-    }
+    lv_draw_buf_t **old_bufs = cover_bufs;
+    size_t old_alloc = bufs_alloc;
     cover_bufs = calloc(count, sizeof(lv_draw_buf_t *));
     bufs_alloc = count;
 
@@ -207,4 +205,10 @@ void ui_show_carousel(void)
     ui_bind_keys(sink);
 
     ui_screen_show(scr);
+
+    if (old_bufs) {
+        for (size_t i = 0; i < old_alloc; i++)
+            if (old_bufs[i]) lv_draw_buf_destroy(old_bufs[i]);
+        free(old_bufs);
+    }
 }
