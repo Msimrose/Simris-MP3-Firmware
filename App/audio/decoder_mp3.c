@@ -1,24 +1,38 @@
 /*
- * MP3 backend: minimp3_ex with float output for maximum decode precision,
- * converted once to full-scale int32 with round-to-nearest.
+ * MP3 backend: minimp3_ex over pact_io callbacks, float output for maximum
+ * decode precision, converted once to full-scale int32 round-to-nearest.
  *
  * mp3dec_ex handles Xing/LAME tags including encoder delay/padding trim,
  * which is what makes gapless playback possible later.
  */
 #define MINIMP3_IMPLEMENTATION
 #define MINIMP3_FLOAT_OUTPUT
+#define MINIMP3_NO_STDIO
 #include "minimp3/minimp3_ex.h"
 
 #include "audio_source.h"
+#include "../pact_io.h"
 #include <math.h>
 #include <stdlib.h>
 
 #define MP3_CHUNK 1152  /* one MPEG frame of samples per channel */
 
 typedef struct {
-    mp3dec_ex_t dec;
-    float       fbuf[MP3_CHUNK * 2];
+    mp3dec_ex_t  dec;
+    mp3dec_io_t  cbio;
+    pact_file_t *io;
+    float        fbuf[MP3_CHUNK * 2];
 } mp3_impl_t;
+
+static size_t mp3_read_cb(void *buf, size_t size, void *ud)
+{
+    return pact_read((pact_file_t *)ud, buf, size);
+}
+
+static int mp3_seek_cb(uint64_t position, void *ud)
+{
+    return pact_seek((pact_file_t *)ud, position) ? 0 : -1;
+}
 
 static inline int32_t f_to_s32(float x)
 {
@@ -67,14 +81,27 @@ static void mp3_close(audio_source_t *s)
 {
     mp3_impl_t *im = s->impl;
     mp3dec_ex_close(&im->dec);
+    pact_close(im->io);
     free(im);
     free(s);
 }
 
 audio_source_t *audio_source_open_mp3(const char *path)
 {
+    pact_file_t *io = pact_open(path);
+    if (!io) return NULL;
+
     mp3_impl_t *im = calloc(1, sizeof(*im));
-    if (mp3dec_ex_open(&im->dec, path, MP3D_SEEK_TO_SAMPLE) != 0) {
+    im->io = io;
+    im->cbio.read = mp3_read_cb;
+    im->cbio.read_data = io;
+    im->cbio.seek = mp3_seek_cb;
+    im->cbio.seek_data = io;
+
+    if (mp3dec_ex_open_cb(&im->dec, &im->cbio, MP3D_SEEK_TO_SAMPLE) != 0 ||
+        im->dec.info.channels == 0) {
+        mp3dec_ex_close(&im->dec);
+        pact_close(io);
         free(im);
         return NULL;
     }

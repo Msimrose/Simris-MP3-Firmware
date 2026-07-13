@@ -16,16 +16,17 @@ file(GLOB APP_UI_SRC
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/*.c
      ${CMAKE_CURRENT_SOURCE_DIR}/../App/ui/assets/*.c)
 file(GLOB APP_AUDIO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/audio/*.c)
+file(GLOB APP_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/*.c)
 file(GLOB APP_LIBRARY_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
 
-add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC} ${APP_LIBRARY_SRC})
+add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC} ${APP_LIBRARY_SRC} ${APP_CORE_SRC})
 target_include_directories(pact_sim PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../App
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
 target_link_libraries(pact_sim PRIVATE lvgl SDL2::SDL2 m pthread)
 
 # Headless decode/verify tool (no SDL, no LVGL)
-add_executable(decode_test decode_test.c ${APP_AUDIO_SRC})
+add_executable(decode_test decode_test.c ${APP_AUDIO_SRC} ${APP_CORE_SRC})
 target_include_directories(decode_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../App
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib)
@@ -33,5 +34,5 @@ target_link_libraries(decode_test PRIVATE m pthread)
 
 # Library scanner test harness (headless)
 file(GLOB APP_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
-add_executable(library_test library_test.c ${APP_LIB_SRC})
+add_executable(library_test library_test.c ${APP_LIB_SRC} ${APP_CORE_SRC})
 target_include_directories(library_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../App)

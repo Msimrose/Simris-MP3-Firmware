@@ -13,6 +13,7 @@
 #include "ui/ui_internal.h"
 #include "audio/audio_engine.h"
 #include "library/library.h"
+#include "storage/storage.h"
 
 volatile int pact_probe_enable = 0;
 
@@ -22,7 +23,8 @@ void pact_link_probe(void)
     static library_t lib;
 
     lv_init();
-    library_load(&lib, "0:/pact.idx");
+    storage_mount_all();
+    library_load(&lib, "1:/pact.idx");
     ui_set_library(&lib, NULL);
     ui_init();
     audio_engine_init(&ring);

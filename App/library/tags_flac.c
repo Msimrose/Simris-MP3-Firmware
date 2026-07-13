@@ -1,6 +1,6 @@
 /* FLAC metadata: STREAMINFO + VORBIS_COMMENT + PICTURE, direct block walk. */
 #include "tags.h"
-#include <stdio.h>
+#include "../pact_io.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -85,12 +85,12 @@ static void parse_picture(const uint8_t *d, uint32_t len, uint64_t block_file_of
 
 bool tags_read_flac(const char *path, track_tags_t *t)
 {
-    FILE *f = fopen(path, "rb");
+    pact_file_t *f = pact_open(path);
     if (!f) return false;
 
     uint8_t hdr[4];
-    if (fread(hdr, 1, 4, f) != 4 || memcmp(hdr, "fLaC", 4) != 0) {
-        fclose(f);
+    if (pact_read(f, hdr, 4) != 4 || memcmp(hdr, "fLaC", 4) != 0) {
+        pact_close(f);
         return false;
     }
 
@@ -99,7 +99,7 @@ bool tags_read_flac(const char *path, track_tags_t *t)
     uint64_t off = 4;
     for (int guard = 0; !last && guard < 64; guard++) {
         uint8_t bh[4];
-        if (fread(bh, 1, 4, f) != 4) break;
+        if (pact_read(f, bh, 4) != 4) break;
         last = bh[0] & 0x80;
         uint8_t type = bh[0] & 0x7F;
         uint32_t blen = ((uint32_t)bh[1] << 16) | ((uint32_t)bh[2] << 8) | bh[3];
@@ -107,7 +107,7 @@ bool tags_read_flac(const char *path, track_tags_t *t)
 
         if (type == 0 && blen >= 34) {                 /* STREAMINFO */
             uint8_t si[34];
-            if (fread(si, 1, 34, f) != 34) break;
+            if (pact_read(f, si, 34) != 34) break;
             uint32_t rate = ((uint32_t)si[10] << 12) | ((uint32_t)si[11] << 4) |
                             (si[12] >> 4);
             uint8_t bps = (uint8_t)((((si[12] & 0x01) << 4) | (si[13] >> 4)) + 1);
@@ -116,19 +116,19 @@ bool tags_read_flac(const char *path, track_tags_t *t)
             t->bits_per_sample = bps;
             if (rate)
                 t->duration_ms = (uint32_t)(total * 1000 / rate);
-            if (blen > 34) fseek(f, (long)(blen - 34), SEEK_CUR);
+            if (blen > 34) pact_seek(f, pact_tell(f) + (blen - 34));
         } else if ((type == 4 || type == 6) && blen <= (16u << 20)) {
             uint8_t *buf = malloc(blen);
-            if (!buf || fread(buf, 1, blen, f) != blen) { free(buf); break; }
+            if (!buf || pact_read(f, buf, blen) != blen) { free(buf); break; }
             if (type == 4) parse_vorbis_comment(buf, blen, t);
             else           parse_picture(buf, blen, payload_off, t, &have_front);
             free(buf);
         } else {
-            if (fseek(f, (long)blen, SEEK_CUR) != 0) break;
+            if (!pact_seek(f, pact_tell(f) + blen)) break;
         }
         off = payload_off + blen;
     }
 
-    fclose(f);
+    pact_close(f);
     return true;
 }

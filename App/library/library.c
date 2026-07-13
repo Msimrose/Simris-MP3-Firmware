@@ -1,4 +1,5 @@
 #include "library.h"
+#include "../pact_io.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -133,30 +134,30 @@ bool library_scan(library_t *lib, const char *root)
 
 /* --------------------------- index save/load ---------------------------- */
 
-static void w_str(FILE *f, const char *s)
+static void w_str(pact_file_t *f, const char *s)
 {
     uint16_t n = s ? (uint16_t)strlen(s) : 0;
-    fwrite(&n, 2, 1, f);
-    if (n) fwrite(s, 1, n, f);
+    pact_write(f, &n, 2);
+    if (n) pact_write(f, s, n);
 }
 
-static char *r_str(FILE *f)
+static char *r_str(pact_file_t *f)
 {
     uint16_t n;
-    if (fread(&n, 2, 1, f) != 1) return NULL;
+    if (pact_read(f, &n, 2) != 2) return NULL;
     char *s = malloc((size_t)n + 1);
-    if (n && fread(s, 1, n, f) != n) { free(s); return NULL; }
+    if (n && pact_read(f, s, n) != n) { free(s); return NULL; }
     s[n] = '\0';
     return s;
 }
 
 bool library_save(const library_t *lib, const char *index_path)
 {
-    FILE *f = fopen(index_path, "wb");
+    pact_file_t *f = pact_open_write(index_path);
     if (!f) return false;
-    fwrite(INDEX_MAGIC, 1, 8, f);
+    pact_write(f, INDEX_MAGIC, 8);
     uint32_t n = (uint32_t)lib->count;
-    fwrite(&n, 4, 1, f);
+    pact_write(f, &n, 4);
     for (size_t i = 0; i < lib->count; i++) {
         const track_t *tr = &lib->tracks[i];
         w_str(f, tr->path);
@@ -165,30 +166,30 @@ bool library_save(const library_t *lib, const char *index_path)
         w_str(f, tr->t.album);
         w_str(f, tr->t.art_mime);
         w_str(f, tr->folder_art);
-        fwrite(&tr->t.track_no, 2, 1, f);
-        fwrite(&tr->t.duration_ms, 4, 1, f);
-        fwrite(&tr->t.sample_rate, 4, 1, f);
-        fwrite(&tr->t.bits_per_sample, 1, 1, f);
+        pact_write(f, &tr->t.track_no, 2);
+        pact_write(f, &tr->t.duration_ms, 4);
+        pact_write(f, &tr->t.sample_rate, 4);
+        pact_write(f, &tr->t.bits_per_sample, 1);
         uint8_t ak = (uint8_t)tr->t.art_kind;
-        fwrite(&ak, 1, 1, f);
-        fwrite(&tr->t.art_offset, 8, 1, f);
-        fwrite(&tr->t.art_size, 4, 1, f);
+        pact_write(f, &ak, 1);
+        pact_write(f, &tr->t.art_offset, 8);
+        pact_write(f, &tr->t.art_size, 4);
     }
-    fclose(f);
+    pact_close(f);
     return true;
 }
 
 bool library_load(library_t *lib, const char *index_path)
 {
     memset(lib, 0, sizeof(*lib));
-    FILE *f = fopen(index_path, "rb");
+    pact_file_t *f = pact_open(index_path);
     if (!f) return false;
 
     char magic[8];
     uint32_t n;
-    if (fread(magic, 1, 8, f) != 8 || memcmp(magic, INDEX_MAGIC, 8) != 0 ||
-        fread(&n, 4, 1, f) != 1) {
-        fclose(f);
+    if (pact_read(f, magic, 8) != 8 || memcmp(magic, INDEX_MAGIC, 8) != 0 ||
+        pact_read(f, &n, 4) != 4) {
+        pact_close(f);
         return false;
     }
 
@@ -212,23 +213,23 @@ bool library_load(library_t *lib, const char *index_path)
             tr->folder_art = NULL;
         }
         uint8_t ak;
-        if (fread(&tr->t.track_no, 2, 1, f) != 1 ||
-            fread(&tr->t.duration_ms, 4, 1, f) != 1 ||
-            fread(&tr->t.sample_rate, 4, 1, f) != 1 ||
-            fread(&tr->t.bits_per_sample, 1, 1, f) != 1 ||
-            fread(&ak, 1, 1, f) != 1 ||
-            fread(&tr->t.art_offset, 8, 1, f) != 1 ||
-            fread(&tr->t.art_size, 4, 1, f) != 1)
+        if (pact_read(f, &tr->t.track_no, 2) != 2 ||
+            pact_read(f, &tr->t.duration_ms, 4) != 4 ||
+            pact_read(f, &tr->t.sample_rate, 4) != 4 ||
+            pact_read(f, &tr->t.bits_per_sample, 1) != 1 ||
+            pact_read(f, &ak, 1) != 1 ||
+            pact_read(f, &tr->t.art_offset, 8) != 8 ||
+            pact_read(f, &tr->t.art_size, 4) != 4)
             goto fail;
         tr->t.art_kind = (art_kind_t)ak;
         lib->count = i + 1;
     }
-    fclose(f);
+    pact_close(f);
     build_albums(lib);
     return true;
 
 fail:
-    fclose(f);
+    pact_close(f);
     library_free(lib);
     return false;
 }
@@ -254,7 +255,7 @@ bool library_extract_art(const track_t *tr, const char *out_path)
                                                              : tr->path;
     if (!src_path) return false;
 
-    FILE *in = fopen(src_path, "rb");
+    pact_file_t *in = pact_open(src_path);
     if (!in) return false;
 
     uint64_t off = 0, len;
@@ -262,23 +263,22 @@ bool library_extract_art(const track_t *tr, const char *out_path)
         off = tr->t.art_offset;
         len = tr->t.art_size;
     } else {
-        fseek(in, 0, SEEK_END);
-        len = (uint64_t)ftell(in);
+        len = pact_size(in);
     }
-    fseek(in, (long)off, SEEK_SET);
+    pact_seek(in, off);
 
-    FILE *out = fopen(out_path, "wb");
-    if (!out) { fclose(in); return false; }
+    pact_file_t *out = pact_open_write(out_path);
+    if (!out) { pact_close(in); return false; }
 
     uint8_t buf[8192];
     uint64_t left = len;
     while (left) {
         size_t chunk = left < sizeof(buf) ? (size_t)left : sizeof(buf);
-        if (fread(buf, 1, chunk, in) != chunk) break;
-        fwrite(buf, 1, chunk, out);
+        if (pact_read(in, buf, chunk) != chunk) break;
+        pact_write(out, buf, chunk);
         left -= chunk;
     }
-    fclose(in);
-    fclose(out);
+    pact_close(in);
+    pact_close(out);
     return left == 0;
 }

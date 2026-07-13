@@ -3,7 +3,7 @@
  * duration from Xing/Info/VBRI headers with a CBR estimate fallback.
  */
 #include "tags.h"
-#include <stdio.h>
+#include "../pact_io.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -147,12 +147,12 @@ static const uint16_t br_v1_l3[16] = {0,32,40,48,56,64,80,96,112,128,160,192,224
 static const uint16_t br_v2_l3[16] = {0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0};
 static const uint16_t sr_tab[4] = {44100, 48000, 32000, 0};
 
-static void mp3_probe_duration(FILE *f, uint32_t audio_start, uint64_t file_size,
+static void mp3_probe_duration(pact_file_t *f, uint32_t audio_start, uint64_t file_size,
                                track_tags_t *t)
 {
     uint8_t buf[192];
-    fseek(f, (long)audio_start, SEEK_SET);
-    if (fread(buf, 1, sizeof(buf), f) < 16) return;
+    pact_seek(f, audio_start);
+    if (pact_read(f, buf, sizeof(buf)) < 16) return;
 
     /* find frame sync */
     uint32_t s = 0;
@@ -199,12 +199,12 @@ static void mp3_probe_duration(FILE *f, uint32_t audio_start, uint64_t file_size
 
 /* ---------- ID3v1 fallback ---------------------------------------------- */
 
-static void id3v1_read(FILE *f, uint64_t file_size, track_tags_t *t)
+static void id3v1_read(pact_file_t *f, uint64_t file_size, track_tags_t *t)
 {
     if (file_size < 128) return;
     uint8_t v1[128];
-    fseek(f, (long)(file_size - 128), SEEK_SET);
-    if (fread(v1, 1, 128, f) != 128 || memcmp(v1, "TAG", 3) != 0) return;
+    pact_seek(f, file_size - 128);
+    if (pact_read(f, v1, 128) != 128 || memcmp(v1, "TAG", 3) != 0) return;
 
     if (!t->title[0])  latin1_to_utf8(t->title,  TAG_STR_MAX, v1 + 3, 30);
     if (!t->artist[0]) latin1_to_utf8(t->artist, TAG_STR_MAX, v1 + 33, 30);
@@ -216,15 +216,13 @@ static void id3v1_read(FILE *f, uint64_t file_size, track_tags_t *t)
 
 bool tags_read_mp3(const char *path, track_tags_t *t)
 {
-    FILE *f = fopen(path, "rb");
+    pact_file_t *f = pact_open(path);
     if (!f) return false;
-    fseek(f, 0, SEEK_END);
-    uint64_t file_size = (uint64_t)ftell(f);
-    fseek(f, 0, SEEK_SET);
+    uint64_t file_size = pact_size(f);
 
     uint32_t audio_start = 0;
     uint8_t h[10];
-    if (fread(h, 1, 10, f) == 10 && memcmp(h, "ID3", 3) == 0) {
+    if (pact_read(f, h, 10) == 10 && memcmp(h, "ID3", 3) == 0) {
         uint8_t ver = h[3];
         bool global_unsync = h[5] & 0x80;
         uint32_t tag_size = syncsafe32(h + 6);
@@ -233,10 +231,10 @@ bool tags_read_mp3(const char *path, track_tags_t *t)
         uint32_t pos = 10;
         if (h[5] & 0x40) {  /* extended header: skip */
             uint8_t eh[4];
-            if (fread(eh, 1, 4, f) == 4) {
+            if (pact_read(f, eh, 4) == 4) {
                 uint32_t esz = (ver == 4) ? syncsafe32(eh) : be32(eh);
                 if (ver == 3) esz += 4;
-                fseek(f, (long)(pos + esz), SEEK_SET);
+                pact_seek(f, pos + esz);
                 pos += esz + ((ver == 4) ? 0 : 0);
                 pos += 4;
             }
@@ -244,8 +242,8 @@ bool tags_read_mp3(const char *path, track_tags_t *t)
 
         while (pos + 10 < 10 + tag_size) {
             uint8_t fh[10];
-            fseek(f, (long)pos, SEEK_SET);
-            if (fread(fh, 1, 10, f) != 10) break;
+            pact_seek(f, pos);
+            if (pact_read(f, fh, 10) != 10) break;
             if (!fh[0]) break;  /* padding */
             uint32_t fsize = (ver == 4) ? syncsafe32(fh + 4) : be32(fh + 4);
             if (!fsize || pos + 10 + fsize > 10 + tag_size) break;
@@ -257,7 +255,7 @@ bool tags_read_mp3(const char *path, track_tags_t *t)
 
             if ((want_text || want_apic) && fsize <= (16u << 20)) {
                 uint8_t *d = malloc(fsize);
-                if (d && fread(d, 1, fsize, f) == fsize) {
+                if (d && pact_read(f, d, fsize) == fsize) {
                     uint32_t dlen = fsize;
                     if (global_unsync || frame_unsync) {
                         /* remove 0xFF 0x00 stuffing in place */
@@ -295,6 +293,6 @@ bool tags_read_mp3(const char *path, track_tags_t *t)
     mp3_probe_duration(f, audio_start, file_size, t);
     t->bits_per_sample = 0;
 
-    fclose(f);
+    pact_close(f);
     return true;
 }

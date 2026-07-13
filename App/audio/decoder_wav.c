@@ -1,16 +1,40 @@
-/* WAV backend: dr_wav, s32 output. */
+/* WAV backend: dr_wav over pact_io callbacks, s32 output. */
 #define DR_WAV_IMPLEMENTATION
+#define DR_WAV_NO_STDIO
 #include "dr_libs/dr_wav.h"
 
 #include "audio_source.h"
+#include "../pact_io.h"
 #include <stdlib.h>
 
 #define WAV_MONO_CHUNK 1024
 
 typedef struct {
-    drwav   w;
-    int32_t mono[WAV_MONO_CHUNK];
+    drwav        w;
+    pact_file_t *io;
+    int32_t      mono[WAV_MONO_CHUNK];
 } wav_impl_t;
+
+static size_t wav_read_cb(void *ud, void *out, size_t bytes)
+{
+    return pact_read((pact_file_t *)ud, out, bytes);
+}
+
+static drwav_bool32 wav_seek_cb(void *ud, int offset, drwav_seek_origin origin)
+{
+    pact_file_t *io = ud;
+    uint64_t base = 0;
+    if (origin == DRWAV_SEEK_CUR) base = pact_tell(io);
+    else if (origin == DRWAV_SEEK_END) base = pact_size(io);
+    return pact_seek(io, base + (uint64_t)(int64_t)offset) ? DRWAV_TRUE
+                                                           : DRWAV_FALSE;
+}
+
+static drwav_bool32 wav_tell_cb(void *ud, drwav_int64 *cursor)
+{
+    *cursor = (drwav_int64)pact_tell((pact_file_t *)ud);
+    return DRWAV_TRUE;
+}
 
 static size_t wav_read(audio_source_t *s, int32_t *out, size_t n)
 {
@@ -22,7 +46,8 @@ static size_t wav_read(audio_source_t *s, int32_t *out, size_t n)
     while (done < n) {
         size_t want = n - done;
         if (want > WAV_MONO_CHUNK) want = WAV_MONO_CHUNK;
-        size_t got = (size_t)drwav_read_pcm_frames_s32(&im->w, want, (drwav_int32 *)im->mono);
+        size_t got = (size_t)drwav_read_pcm_frames_s32(&im->w, want,
+                                                       (drwav_int32 *)im->mono);
         for (size_t i = 0; i < got; i++) {
             out[(done + i) * 2 + 0] = im->mono[i];
             out[(done + i) * 2 + 1] = im->mono[i];
@@ -43,14 +68,20 @@ static void wav_close(audio_source_t *s)
 {
     wav_impl_t *im = s->impl;
     drwav_uninit(&im->w);
+    pact_close(im->io);
     free(im);
     free(s);
 }
 
 audio_source_t *audio_source_open_wav(const char *path)
 {
+    pact_file_t *io = pact_open(path);
+    if (!io) return NULL;
+
     wav_impl_t *im = calloc(1, sizeof(*im));
-    if (!drwav_init_file(&im->w, path, NULL)) {
+    im->io = io;
+    if (!drwav_init(&im->w, wav_read_cb, wav_seek_cb, wav_tell_cb, io, NULL)) {
+        pact_close(io);
         free(im);
         return NULL;
     }

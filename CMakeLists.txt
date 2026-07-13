@@ -48,11 +48,14 @@ file(GLOB APP_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/App/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/audio/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/library/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/storage/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/assets/*.c)
+file(GLOB FATFS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/lib/fatfs/*.c)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${LVGL_SRC}
     ${APP_SRC}
+    ${FATFS_SRC}
 )
 
 # Add include paths
@@ -60,6 +63,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/fatfs
 )
 
 # Add project symbols (macros)
