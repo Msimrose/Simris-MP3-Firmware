@@ -98,6 +98,13 @@ static void sim_play(const char *path)
 
 static library_t lib;
 
+static uint32_t path_hash(const char *s)
+{
+    uint32_t h = 5381;
+    while (*s) h = h * 33u + (uint8_t)*s++;
+    return h;
+}
+
 static const char *sim_album_art(size_t album_idx, int px)
 {
     static char lv_path[512];
@@ -106,10 +113,14 @@ static const char *sim_album_art(size_t album_idx, int px)
     const track_t *tr = &lib.tracks[lib.albums[album_idx].first];
     if (tr->t.art_kind == ART_NONE) return NULL;
 
+    uint32_t key = path_hash(tr->path);   /* cache survives library switches */
     mkdir("/tmp/pact_art", 0755);
     char full[512], thumb[512];
-    snprintf(full, sizeof(full), "/tmp/pact_art/%zu.img", album_idx);
-    snprintf(thumb, sizeof(thumb), "/tmp/pact_art/%zu_%d.jpg", album_idx, px);
+    snprintf(full, sizeof(full), "/tmp/pact_art/%08x.img", key);
+    snprintf(thumb, sizeof(thumb), "/tmp/pact_art/%08x_%d.jpg", key, px);
+
+    char thumb_bmp[512];
+    snprintf(thumb_bmp, sizeof(thumb_bmp), "/tmp/pact_art/%08x_%d.bmp", key, px);
 
     struct stat st;
     if (stat(thumb, &st) != 0) {  /* build once per size, then reuse */
@@ -119,6 +130,13 @@ static const char *sim_album_art(size_t album_idx, int px)
                  "sips -s format jpeg -z %d %d '%s' --out '%s' >/dev/null 2>&1",
                  px, px, full, thumb);
         if (system(cmd) != 0 || stat(thumb, &st) != 0) return NULL;
+    }
+    if (stat(thumb_bmp, &st) != 0) {  /* raw twin for RAM/scale use */
+        char cmd[1200];
+        snprintf(cmd, sizeof(cmd),
+                 "sips -s format bmp -z %d %d '%s' --out '%s' >/dev/null 2>&1",
+                 px, px, full, thumb_bmp);
+        (void)system(cmd);
     }
 
     snprintf(lv_path, sizeof(lv_path), "A:%s", thumb);

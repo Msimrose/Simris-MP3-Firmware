@@ -7,6 +7,7 @@
 typedef enum {
     UI_SCR_MENU = 0,
     UI_SCR_ALBUMS,
+    UI_SCR_CAROUSEL,
     UI_SCR_TRACKS,
     UI_SCR_NOWPLAYING,
 } ui_screen_id_t;
@@ -26,12 +27,23 @@ void   ui_volume_step(int dir);               /* +-1 step, shows toast */
 /* Route all keys to obj (single-focus model: one receiver per screen). */
 void ui_bind_keys(lv_obj_t *obj);
 
+/* Screen lifecycle: create a black screen, then show it (deletes the
+ * previous screen so navigation cannot leak). */
+lv_obj_t *ui_screen_new(void);
+void      ui_screen_show(lv_obj_t *scr);
+
+/* Shared chrome */
+void ui_battery_create(lv_obj_t *parent);          /* top-right battery */
+void ui_brand_mark(lv_obj_t *parent, int x, int y); /* simris audio mark */
+
 /* Screen builders / event handlers */
 void ui_show_menu(void);
 void ui_show_albums(void);
+void ui_show_carousel(void);
 void ui_show_tracks(size_t album_idx);
 void ui_show_nowplaying(void);
 void ui_albums_event(pact_event_t evt);
+void ui_carousel_event(pact_event_t evt);
 void ui_tracks_event(pact_event_t evt);
 void ui_menu_event(pact_event_t evt);
 void ui_nowplaying_event(pact_event_t evt);

@@ -58,9 +58,7 @@ void ui_show_albums(void)
     alb_rows = calloc(alb_count, sizeof(lv_obj_t *));
     alb_names = calloc(alb_count, sizeof(lv_obj_t *));
 
-    lv_obj_t *scr = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_t *scr = ui_screen_new();
 
     lv_obj_t *hdr = lv_label_create(scr);
     lv_label_set_text(hdr, "Albums");
@@ -123,7 +121,7 @@ void ui_show_albums(void)
     if (alb_sel >= (int)alb_count) alb_sel = 0;
     albums_paint();
     ui_bind_keys(list);
-    lv_screen_load(scr);
+    ui_screen_show(scr);
 }
 
 /* ---- track list -------------------------------------------------------- */
@@ -160,7 +158,7 @@ void ui_tracks_event(pact_event_t evt)
         ui_show_nowplaying();
         break;
     case PACT_EVT_UP:
-        ui_show_albums();
+        ui_show_carousel();
         break;
     default: break;
     }
@@ -180,9 +178,8 @@ void ui_show_tracks(size_t album_idx)
     trk_rows = calloc(trk_count, sizeof(lv_obj_t *));
     trk_names = calloc(trk_count, sizeof(lv_obj_t *));
 
-    lv_obj_t *scr = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_t *scr = ui_screen_new();
+    ui_battery_create(scr);
 
     /* header: cover + album + artist */
     const char *art = ui_art_provider ? ui_art_provider(album_idx, 64) : NULL;
@@ -256,5 +253,5 @@ void ui_show_tracks(size_t album_idx)
 
     tracks_paint();
     ui_bind_keys(list);
-    lv_screen_load(scr);
+    ui_screen_show(scr);
 }

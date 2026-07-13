@@ -1,5 +1,6 @@
 /*
- * Pact MP-1 - UI core: navigation plumbing + main menu (landscape 600x450).
+ * Pact MP-1 - UI core: navigation plumbing + split main menu.
+ * Variant A ("recommended"): Figma 01 split layout with 01c type scale.
  *
  * Brand rules (docs/brand-ui-system.md): true-black ground, warm-white type,
  * no accent color, selection is a subtle grey fill, battery is the only
@@ -8,8 +9,9 @@
 #include "ui_internal.h"
 #include "../audio/audio_engine.h"
 
-#define MENU_ROW_H   46
-#define MENU_PAD_X   48
+#define MENU_ROW_H   44
+#define MENU_PAD_X   22
+#define MENU_COL_W   320
 
 const library_t   *ui_lib;
 ui_art_provider_t  ui_art_provider;
@@ -18,22 +20,124 @@ ui_screen_id_t     ui_cur_screen = UI_SCR_MENU;
 size_t             ui_current_track = UI_NO_TRACK;
 
 static lv_group_t *group;
+static lv_obj_t   *prev_scr;
 
 static const char *menu_items[] = {
-    "Now Playing", "Albums", "Artists", "Songs", "Folders", "Playlists", "Settings",
+    "Now Playing", "Albums", "Artists", "Songs", "Playlists", "Settings",
+    "Shuffle Songs",
 };
 #define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
-#define MENU_IDX_ALBUMS 1
+#define MENU_IDX_NOWPLAYING 0
+#define MENU_IDX_ALBUMS     1
 
 static lv_obj_t *menu_rows[MENU_COUNT];
 static lv_obj_t *menu_labels[MENU_COUNT];
+static lv_obj_t *menu_chevrons[MENU_COUNT];
 static int       menu_sel;
 
 static lv_obj_t *batt_shell, *batt_fill, *batt_label;
 static int       batt_pct = 84;
 static bool      batt_chg = false;
 
-/* ---- key plumbing ------------------------------------------------------ */
+/* ---- screen lifecycle --------------------------------------------------- */
+
+lv_obj_t *ui_screen_new(void)
+{
+    lv_obj_t *scr = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    batt_fill = NULL;  /* chrome belongs to the old screen until recreated */
+    batt_label = NULL;
+    return scr;
+}
+
+void ui_screen_show(lv_obj_t *scr)
+{
+    lv_screen_load(scr);
+    if (prev_scr && prev_scr != scr) lv_obj_delete(prev_scr);
+    prev_scr = scr;
+}
+
+/* ---- shared chrome ------------------------------------------------------ */
+
+void ui_brand_mark(lv_obj_t *parent, int x, int y)
+{
+    lv_obj_t *w = lv_label_create(parent);
+    lv_label_set_text(w, "simris");
+    lv_obj_set_style_text_font(w, &diatype_regular_16, 0);
+    lv_obj_set_style_text_color(w, PACT_COL_TEXT, 0);
+    lv_obj_set_pos(w, x, y);
+
+    lv_obj_t *a = lv_label_create(parent);
+    lv_label_set_text(a, "audio");
+    lv_obj_set_style_text_font(a, &diatype_regular_16, 0);
+    lv_obj_set_style_text_color(a, PACT_COL_TEXT_DIM, 0);
+    lv_obj_align_to(a, w, LV_ALIGN_OUT_RIGHT_BOTTOM, 5, 0);
+
+    /* offset two-square mark */
+    lv_obj_t *s1 = lv_obj_create(parent);
+    lv_obj_set_size(s1, 4, 4);
+    lv_obj_set_style_bg_color(s1, PACT_COL_TEXT, 0);
+    lv_obj_set_style_bg_opa(s1, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s1, 0, 0);
+    lv_obj_set_style_radius(s1, 0, 0);
+    lv_obj_align_to(s1, a, LV_ALIGN_OUT_RIGHT_TOP, 6, 0);
+
+    lv_obj_t *s2 = lv_obj_create(parent);
+    lv_obj_set_size(s2, 4, 4);
+    lv_obj_set_style_bg_color(s2, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_bg_opa(s2, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s2, 0, 0);
+    lv_obj_set_style_radius(s2, 0, 0);
+    lv_obj_align_to(s2, s1, LV_ALIGN_OUT_BOTTOM_RIGHT, -1, 1);
+}
+
+void ui_battery_create(lv_obj_t *parent)
+{
+    batt_shell = lv_obj_create(parent);
+    lv_obj_set_size(batt_shell, 30, 14);
+    lv_obj_align(batt_shell, LV_ALIGN_TOP_RIGHT, -24, 20);
+    lv_obj_set_style_bg_opa(batt_shell, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_color(batt_shell, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_border_width(batt_shell, 1, 0);
+    lv_obj_set_style_radius(batt_shell, 4, 0);
+    lv_obj_set_style_pad_all(batt_shell, 2, 0);
+    lv_obj_clear_flag(batt_shell, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *nub = lv_obj_create(parent);
+    lv_obj_set_size(nub, 2, 6);
+    lv_obj_align_to(nub, batt_shell, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
+    lv_obj_set_style_bg_color(nub, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(nub, 0, 0);
+    lv_obj_set_style_radius(nub, 1, 0);
+
+    batt_fill = lv_obj_create(batt_shell);
+    lv_obj_set_size(batt_fill, lv_pct(100), lv_pct(100));
+    lv_obj_align(batt_fill, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_bg_color(batt_fill, PACT_COL_WHITE, 0);
+    lv_obj_set_style_bg_opa(batt_fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(batt_fill, 0, 0);
+    lv_obj_set_style_radius(batt_fill, 1, 0);
+
+    ui_set_battery(batt_pct, batt_chg);
+}
+
+void ui_set_battery(int percent, bool charging)
+{
+    batt_pct = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+    batt_chg = charging;
+    if (!batt_fill || !lv_obj_is_valid(batt_fill)) return;
+    lv_obj_set_width(batt_fill, lv_pct(batt_pct));
+    lv_obj_set_style_bg_color(batt_fill,
+                              batt_pct < 15 ? PACT_COL_BATT_LOW : PACT_COL_WHITE, 0);
+    if (batt_label && lv_obj_is_valid(batt_label)) {
+        lv_label_set_text_fmt(batt_label, batt_chg ? "%d%% +" : "%d%%", batt_pct);
+        lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
+    }
+}
+
+/* ---- key plumbing ------------------------------------------------------- */
 
 static void key_cb(lv_event_t *e)
 {
@@ -63,19 +167,22 @@ void ui_bind_keys(lv_obj_t *obj)
     lv_group_focus_obj(obj);
 }
 
+/* ---- volume toast -------------------------------------------------------- */
+
 static lv_obj_t *vol_toast;
 static lv_timer_t *vol_toast_timer;
 
 static void vol_toast_expire(lv_timer_t *t)
 {
     (void)t;
-    if (vol_toast) { lv_obj_delete(vol_toast); vol_toast = NULL; }
+    if (vol_toast && lv_obj_is_valid(vol_toast)) lv_obj_delete(vol_toast);
+    vol_toast = NULL;
     vol_toast_timer = NULL;
 }
 
 void ui_show_vol_toast(void)
 {
-    if (vol_toast) { lv_obj_delete(vol_toast); vol_toast = NULL; }
+    if (vol_toast && lv_obj_is_valid(vol_toast)) lv_obj_delete(vol_toast);
     vol_toast = lv_obj_create(lv_screen_active());
     lv_obj_set_size(vol_toast, 140, 34);
     lv_obj_align(vol_toast, LV_ALIGN_BOTTOM_MID, 0, -16);
@@ -105,9 +212,10 @@ void ui_volume_step(int dir)
     ui_show_vol_toast();
 }
 
+/* ---- event routing ------------------------------------------------------- */
+
 void ui_handle_event(pact_event_t evt)
 {
-    /* volume works everywhere */
     if (evt == PACT_EVT_VOL_UP || evt == PACT_EVT_VOL_DOWN) {
         ui_volume_step(evt == PACT_EVT_VOL_UP ? 1 : -1);
         return;
@@ -115,6 +223,7 @@ void ui_handle_event(pact_event_t evt)
     switch (ui_cur_screen) {
     case UI_SCR_MENU:       ui_menu_event(evt);       break;
     case UI_SCR_ALBUMS:     ui_albums_event(evt);     break;
+    case UI_SCR_CAROUSEL:   ui_carousel_event(evt);   break;
     case UI_SCR_TRACKS:     ui_tracks_event(evt);     break;
     case UI_SCR_NOWPLAYING: ui_nowplaying_event(evt); break;
     }
@@ -135,7 +244,6 @@ void ui_play_track(size_t track_idx)
 {
     if (!ui_lib || track_idx >= ui_lib->count) return;
 
-    /* rate-limit: key auto-repeat must not machine-gun track switches */
     static uint32_t last_switch;
     uint32_t now = lv_tick_get();
     if (last_switch && now - last_switch < 350) return;
@@ -153,7 +261,6 @@ static void player_tick(lv_timer_t *t)
     static int finish_grace;
     if (audio_engine_state() == ENGINE_FINISHED &&
         ui_current_track != UI_NO_TRACK) {
-        /* let the output ring drain (~400 ms) before jumping */
         if (++finish_grace >= 2) {
             finish_grace = 0;
             size_t alb = ui_album_of_track(ui_current_track);
@@ -170,55 +277,7 @@ static void player_tick(lv_timer_t *t)
     ui_nowplaying_refresh();
 }
 
-/* ---- battery (dynamic: proportional fill, red <15%, per brand doc) ----- */
-
-static void battery_create(lv_obj_t *parent)
-{
-    batt_shell = lv_obj_create(parent);
-    lv_obj_set_size(batt_shell, 36, 18);
-    lv_obj_align(batt_shell, LV_ALIGN_TOP_RIGHT, -24, 18);
-    lv_obj_set_style_bg_opa(batt_shell, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(batt_shell, PACT_COL_TEXT_DIM, 0);
-    lv_obj_set_style_border_width(batt_shell, 2, 0);
-    lv_obj_set_style_radius(batt_shell, 4, 0);
-    lv_obj_set_style_pad_all(batt_shell, 2, 0);
-    lv_obj_clear_flag(batt_shell, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *nub = lv_obj_create(parent);
-    lv_obj_set_size(nub, 3, 8);
-    lv_obj_align_to(nub, batt_shell, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
-    lv_obj_set_style_bg_color(nub, PACT_COL_TEXT_DIM, 0);
-    lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(nub, 0, 0);
-    lv_obj_set_style_radius(nub, 1, 0);
-
-    batt_fill = lv_obj_create(batt_shell);
-    lv_obj_set_size(batt_fill, lv_pct(100), lv_pct(100));
-    lv_obj_align(batt_fill, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_bg_color(batt_fill, PACT_COL_WHITE, 0);
-    lv_obj_set_style_bg_opa(batt_fill, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(batt_fill, 0, 0);
-    lv_obj_set_style_radius(batt_fill, 1, 0);
-
-    batt_label = lv_label_create(parent);
-    lv_obj_set_style_text_font(batt_label, pact_font_data, 0);
-    lv_obj_set_style_text_color(batt_label, PACT_COL_TEXT_DIM, 0);
-    ui_set_battery(batt_pct, batt_chg);
-}
-
-void ui_set_battery(int percent, bool charging)
-{
-    batt_pct = percent < 0 ? 0 : percent > 100 ? 100 : percent;
-    batt_chg = charging;
-    if (!batt_fill) return;
-    lv_obj_set_width(batt_fill, lv_pct(batt_pct));
-    lv_obj_set_style_bg_color(batt_fill,
-                              batt_pct < 15 ? PACT_COL_BATT_LOW : PACT_COL_WHITE, 0);
-    lv_label_set_text_fmt(batt_label, batt_chg ? "%d%% +" : "%d%%", batt_pct);
-    lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
-}
-
-/* ---- main menu --------------------------------------------------------- */
+/* ---- split main menu (Figma 01 layout, 01c type scale) ------------------ */
 
 static void menu_paint_selection(void)
 {
@@ -227,6 +286,8 @@ static void menu_paint_selection(void)
         lv_obj_set_style_bg_opa(menu_rows[i], sel ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
         lv_obj_set_style_text_color(menu_labels[i],
                                     sel ? PACT_COL_TEXT : PACT_COL_TEXT_DIM, 0);
+        lv_obj_set_style_text_color(menu_chevrons[i],
+                                    sel ? PACT_COL_TEXT_DIM : PACT_COL_SELECT, 0);
     }
     lv_obj_scroll_to_view(menu_rows[menu_sel], LV_ANIM_ON);
 }
@@ -242,8 +303,8 @@ void ui_menu_event(pact_event_t evt)
         break;
     case PACT_EVT_CENTER:
         if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count)
-            ui_show_albums();
-        else if (menu_sel == 0 && ui_current_track != UI_NO_TRACK)
+            ui_show_carousel();
+        else if (menu_sel == MENU_IDX_NOWPLAYING && ui_current_track != UI_NO_TRACK)
             ui_show_nowplaying();
         break;
     default: break;
@@ -253,27 +314,32 @@ void ui_menu_event(pact_event_t evt)
 void ui_show_menu(void)
 {
     ui_cur_screen = UI_SCR_MENU;
-    lv_obj_t *scr = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_t *scr = ui_screen_new();
 
-    lv_obj_t *mark = lv_label_create(scr);
-    lv_label_set_text(mark, "PACT");
-    lv_obj_set_style_text_font(mark, pact_font_data, 0);
-    lv_obj_set_style_text_color(mark, PACT_COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_letter_space(mark, 3, 0);
-    lv_obj_align(mark, LV_ALIGN_TOP_LEFT, MENU_PAD_X, 20);
+    /* header: small-caps section label + battery, hairline below */
+    lv_obj_t *hdr = lv_label_create(scr);
+    lv_label_set_text(hdr, "MUSIC");
+    lv_obj_set_style_text_font(hdr, &diatype_regular_16, 0);
+    lv_obj_set_style_text_color(hdr, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_text_letter_space(hdr, 3, 0);
+    lv_obj_set_pos(hdr, MENU_PAD_X + 6, 22);
 
-    battery_create(scr);
+    ui_battery_create(scr);
 
+    lv_obj_t *rule = lv_obj_create(scr);
+    lv_obj_set_size(rule, 600, 1);
+    lv_obj_set_pos(rule, 0, 52);
+    lv_obj_set_style_bg_color(rule, PACT_COL_SELECT, 0);
+    lv_obj_set_style_bg_opa(rule, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(rule, 0, 0);
+
+    /* left column: menu list */
     lv_obj_t *list = lv_obj_create(scr);
-    lv_obj_set_size(list, 600, 450 - 64);
-    lv_obj_align(list, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(list, MENU_COL_W, 450 - 72);
+    lv_obj_set_pos(list, 0, 72);
     lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(list, 0, 0);
-    lv_obj_set_style_pad_left(list, MENU_PAD_X - 16, 0);
-    lv_obj_set_style_pad_right(list, MENU_PAD_X - 16, 0);
-    lv_obj_set_style_pad_top(list, 8, 0);
+    lv_obj_set_style_pad_all(list, 0, 0);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(list, 2, 0);
     lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
@@ -284,8 +350,9 @@ void ui_show_menu(void)
         lv_obj_set_style_bg_color(row, PACT_COL_SELECT, 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(row, 0, 0);
-        lv_obj_set_style_radius(row, 8, 0);
-        lv_obj_set_style_pad_left(row, 16, 0);
+        lv_obj_set_style_radius(row, 0, 0);
+        lv_obj_set_style_pad_left(row, MENU_PAD_X, 0);
+        lv_obj_set_style_pad_right(row, 16, 0);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *lbl = lv_label_create(row);
@@ -293,16 +360,61 @@ void ui_show_menu(void)
         lv_obj_set_style_text_font(lbl, &diatype_regular_22, 0);
         lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
+        lv_obj_t *chev = lv_label_create(row);
+        lv_label_set_text(chev, ">");
+        lv_obj_set_style_text_font(chev, &diatype_regular_16, 0);
+        lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+
         menu_rows[i] = row;
         menu_labels[i] = lbl;
+        menu_chevrons[i] = chev;
+    }
+
+    /* right pane: current (or first) album, art-forward */
+    size_t alb = (size_t)-1;
+    const char *pane_title = NULL, *pane_sub = NULL;
+    if (ui_current_track != UI_NO_TRACK) {
+        alb = ui_album_of_track(ui_current_track);
+        pane_title = ui_lib->tracks[ui_current_track].t.title;
+        pane_sub = ui_lib->tracks[ui_current_track].t.artist;
+    } else if (ui_lib && ui_lib->album_count) {
+        alb = 0;
+        pane_title = ui_lib->albums[0].album;
+        pane_sub = ui_lib->albums[0].artist;
+    }
+    if (alb != (size_t)-1) {
+        const char *art = ui_art_provider ? ui_art_provider(alb, 190) : NULL;
+        if (art) {
+            lv_obj_t *cov = lv_image_create(scr);
+            lv_image_set_src(cov, art);
+            lv_obj_set_size(cov, 190, 190);
+            lv_obj_set_pos(cov, 365, 100);
+            lv_obj_set_style_radius(cov, 4, 0);
+            lv_obj_set_style_clip_corner(cov, true, 0);
+        }
+        lv_obj_t *t1 = lv_label_create(scr);
+        lv_label_set_text(t1, pane_title ? pane_title : "");
+        lv_obj_set_style_text_font(t1, &diatype_regular_16, 0);
+        lv_obj_set_style_text_color(t1, PACT_COL_TEXT, 0);
+        lv_label_set_long_mode(t1, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(t1, 210, 20);
+        lv_obj_set_pos(t1, 365, 308);
+
+        lv_obj_t *t2 = lv_label_create(scr);
+        lv_label_set_text(t2, pane_sub ? pane_sub : "");
+        lv_obj_set_style_text_font(t2, &diatype_regular_16, 0);
+        lv_obj_set_style_text_color(t2, PACT_COL_TEXT_DIM, 0);
+        lv_label_set_long_mode(t2, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(t2, 210, 20);
+        lv_obj_set_pos(t2, 365, 330);
     }
 
     menu_paint_selection();
     ui_bind_keys(list);
-    lv_screen_load(scr);
+    ui_screen_show(scr);
 }
 
-/* ---- public API -------------------------------------------------------- */
+/* ---- public API ---------------------------------------------------------- */
 
 void ui_set_library(const library_t *lib, ui_art_provider_t art)
 {
