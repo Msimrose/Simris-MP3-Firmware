@@ -126,10 +126,15 @@ static const char *sim_album_art(size_t album_idx, int px)
     struct stat st;
     if (stat(thumb, &st) != 0) {  /* build once per size, then reuse */
         if (stat(full, &st) != 0 && !library_extract_art(tr, full)) return NULL;
-        char cmd[1200];
+        /* via PNG so the output is always a BASELINE jpeg: LVGL's TJPGD
+         * (and the device's hardware JPEG codec) cannot decode progressive
+         * files, which some embedded art uses */
+        char cmd[1600];
         snprintf(cmd, sizeof(cmd),
-                 "sips -s format jpeg -z %d %d '%s' --out '%s' >/dev/null 2>&1",
-                 px, px, full, thumb);
+                 "sips -s format png -z %d %d '%s' --out '%s.png' >/dev/null 2>&1"
+                 " && sips -s format jpeg '%s.png' --out '%s' >/dev/null 2>&1;"
+                 " rm -f '%s.png'",
+                 px, px, full, thumb, thumb, thumb, thumb);
         if (system(cmd) != 0 || stat(thumb, &st) != 0) return NULL;
     }
     if (stat(thumb_bmp, &st) != 0) {  /* raw twin for RAM/scale use */
