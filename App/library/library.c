@@ -7,6 +7,8 @@
 #ifdef PACT_SIM
 #include <dirent.h>
 #include <sys/stat.h>
+#else
+#include "ff.h"
 #endif
 
 #define INDEX_MAGIC   "PACTIDX\x01"
@@ -102,9 +104,8 @@ static void build_albums(library_t *lib)
 }
 
 /* ------------------------------ scan ------------------------------------ */
-/* Directory walking is host-only for now; the device scan arrives with the
- * FatFs port (f_opendir/f_readdir) at storage bring-up. */
-#ifdef PACT_SIM
+/* Same walk on both sides: POSIX (host) and FatFs (device). Everything
+ * below the directory iteration is shared - tags parse via pact_io. */
 
 static bool has_ext(const char *name, const char *ext)
 {
@@ -127,6 +128,20 @@ static void push_track(library_t *lib, const char *path, const char *folder_art)
     lib->tracks = realloc(lib->tracks, (lib->count + 1) * sizeof(track_t));
     lib->tracks[lib->count++] = tr;
 }
+
+static int track_cmp(const void *a, const void *b)
+{
+    const track_t *ta = a, *tb = b;
+    int c = strcasecmp(ta->t.album, tb->t.album);
+    if (c) return c;
+    c = strcasecmp(ta->t.artist, tb->t.artist);
+    if (c) return c;
+    if (ta->t.track_no != tb->t.track_no)
+        return ta->t.track_no < tb->t.track_no ? -1 : 1;
+    return strcasecmp(ta->path, tb->path);
+}
+
+#ifdef PACT_SIM
 
 static void scan_dir(library_t *lib, const char *dir, int depth)
 {
@@ -165,17 +180,58 @@ static void scan_dir(library_t *lib, const char *dir, int depth)
     closedir(d);
 }
 
-static int track_cmp(const void *a, const void *b)
+#else /* device / FatFs walk (f_opendir + f_readdir) */
+
+/* Per-level state (DIR + FILINFO + two path buffers, ~1.6 KB) lives on the
+ * heap: the storage task stack is 6 KB and the walk recurses to MAX_DEPTH.
+ * Pass roots without a trailing slash ("1:", "1:/Music"). */
+typedef struct {
+    DIR     dir;
+    FILINFO fno;
+    char    path[512];
+    char    folder_art[512];
+} scan_frame_t;
+
+static void scan_dir(library_t *lib, const char *dir, int depth)
 {
-    const track_t *ta = a, *tb = b;
-    int c = strcasecmp(ta->t.album, tb->t.album);
-    if (c) return c;
-    c = strcasecmp(ta->t.artist, tb->t.artist);
-    if (c) return c;
-    if (ta->t.track_no != tb->t.track_no)
-        return ta->t.track_no < tb->t.track_no ? -1 : 1;
-    return strcasecmp(ta->path, tb->path);
+    if (depth > MAX_DEPTH) return;
+    scan_frame_t *fr = calloc(1, sizeof(*fr));
+    if (!fr) return;
+    if (f_opendir(&fr->dir, dir) != FR_OK) {
+        free(fr);
+        return;
+    }
+
+    /* pass 1: find folder art in this directory */
+    while (f_readdir(&fr->dir, &fr->fno) == FR_OK && fr->fno.fname[0]) {
+        if (fr->fno.fattrib & AM_DIR) continue;
+        if (strcasecmp(fr->fno.fname, "cover.jpg") == 0 ||
+            strcasecmp(fr->fno.fname, "folder.jpg") == 0 ||
+            strcasecmp(fr->fno.fname, "cover.png") == 0) {
+            snprintf(fr->folder_art, sizeof(fr->folder_art), "%s/%s", dir,
+                     fr->fno.fname);
+            break;
+        }
+    }
+    f_readdir(&fr->dir, NULL);   /* rewind */
+
+    /* pass 2: tracks + recurse */
+    while (f_readdir(&fr->dir, &fr->fno) == FR_OK && fr->fno.fname[0]) {
+        if (fr->fno.fname[0] == '.') continue;
+        if (fr->fno.fattrib & (AM_HID | AM_SYS)) continue;
+        snprintf(fr->path, sizeof(fr->path), "%s/%s", dir, fr->fno.fname);
+        if (fr->fno.fattrib & AM_DIR)
+            scan_dir(lib, fr->path, depth + 1);
+        else if (has_ext(fr->fno.fname, "flac") ||
+                 has_ext(fr->fno.fname, "mp3") ||
+                 has_ext(fr->fno.fname, "wav"))
+            push_track(lib, fr->path, fr->folder_art[0] ? fr->folder_art : NULL);
+    }
+    f_closedir(&fr->dir);
+    free(fr);
 }
+
+#endif /* PACT_SIM */
 
 bool library_scan(library_t *lib, const char *root)
 {
@@ -186,17 +242,6 @@ bool library_scan(library_t *lib, const char *root)
     build_albums(lib);
     return true;
 }
-
-#else /* device: no filesystem walk until FatFs lands */
-
-bool library_scan(library_t *lib, const char *root)
-{
-    (void)root;
-    memset(lib, 0, sizeof(*lib));
-    return false;
-}
-
-#endif /* PACT_SIM */
 
 /* --------------------------- index save/load ---------------------------- */
 

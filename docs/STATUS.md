@@ -64,13 +64,38 @@ what remains. Written at the end of the first major build push (branches
 - Demo gallery: /tmp/pact-gallery (regenerate if /tmp purged: real covers +
   symlinked real albums).
 
-### Storage stack (compiles for device; runs at hardware bring-up)
+### Storage stack (host-VERIFIED on a disk image; SDMMC silicon at bring-up)
 - `App/pact_io.h` seam: host backend = stdio, device = FatFs. All decoders,
   tag parsers, index IO go through it (regression suite re-verified after
   the swap).
-- `lib/fatfs/` R0.15b: exFAT + UTF-8 LFN (heap) + 2 volumes + mkfs.
-  `App/storage/diskio_sdmmc.c`: SDMMC1 = microSD = "0:", SDMMC2 = eMMC =
-  "1:", polling first (DMA+MPU is a Phase-2 perf step).
+- FatFs upgraded **R0.15b -> R0.16 + official patches p1+p2** (2026-07-14).
+  Why: R0.15b shipped a real regression - f_readdir repeats the LAST entry
+  forever at end-of-directory (upstream R0.16 changelog: "Fixed f_readdir
+  cannot detect end of directory... appeared at R0.15b"). Found by
+  fatfs_test the first time f_readdir ever actually ran; on device it
+  would have hung the boot scan in an infinite loop. p2 also fixes the
+  2026 FatFs CVEs (malicious/corrupt volume robustness - a device that
+  mounts user SD cards wants this). Code page 932 -> 437 (LFN names are
+  Unicode regardless; drops ~60K of DBCS tables from flash).
+- **FF_FS_REENTRANT = 1** with FreeRTOS mutexes in `ffsystem_pact.c`
+  (pthread when PACT_FATFS_HOST): audio (decoder reads), ui (track open)
+  and storage (scan) all call FatFs concurrently - the file's old "single
+  filesystem owner" comment was stale and wrong.
+- Device library scan DONE: `library.c` walks f_opendir/f_readdir on
+  device builds (walk helpers shared with the POSIX branch; per-level
+  frames heap-allocated because the storage task stack is 6K).
+  storage_task mounts, scans (eMMC "1:" first, else "0:"), saves
+  1:/pact.idx, publishes to ui_task. Volume-merge + rescan-on-SD-insert
+  are TODO.
+- **VERIFIED on host** (`sim/fatfs_test/`, compiled WITHOUT PACT_SIM +
+  with PACT_FATFS_HOST): 1 GiB file-backed exFAT image -> f_mkfs -> copy
+  the demo gallery in (43 real tracks: MP3 embedded-art UTF-8 titles +
+  24/48 FLAC + folder art) -> device scan -> field-by-field index
+  round-trip through pact_io -> art extraction. Passes in 0.5 s. Run:
+  `fatfs_test <music_dir> [image]`.
+- `App/storage/diskio_sdmmc.c`: SDMMC1 = microSD = "0:", SDMMC2 = eMMC =
+  "1:", polling first (DMA+MPU is a Phase-2 perf step). This diskio layer
+  against real silicon is the only storage piece left unverified.
 
 ### SAI output driver (compiles for device; sounds at hardware bring-up)
 - `App/hal/sai_out.c` + `App/audio/audio_out.h`: ring consumer on
@@ -96,9 +121,10 @@ what remains. Written at the end of the first major build push (branches
   from main() USER CODE RTOS_THREADS. Tasks (CMSIS-RTOS2, stacks from the
   64K RTOS heap in DTCM): audio (High; pump loop woken by the SAI wakeup
   hook via vTaskNotifyGiveFromISR + 10ms poll fallback), ui (Normal;
-  lv_init + tick -> pact_display_init() -> library + ui_init +
-  lv_timer_handler loop), storage (Low; mounts both volumes; scan lands
-  here). input/power/led tasks come with the input/power HAL.
+  lv_init + tick -> pact_display_init() -> wait for the library ->
+  ui_init + lv_timer_handler loop), storage (Low; mounts, scans, saves
+  the index, publishes the library). input/power/led tasks come with the
+  input/power HAL.
   `device_play()` = the UI on_play seam: engine play ->
   audio_out_start(track rate).
 - main() USER CODE 1: PWR_HOLD (PE15) latched high first thing via raw
@@ -155,10 +181,9 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **Library scan over FatFs** - port scan_dir to f_opendir/f_readdir
-   (parsers already portable); on-device thumb cache generation
-   (HW JPEG decode -> pre-scaled raw thumbs; must transcode progressive
-   sources, see baseline note above).
+1. **On-device thumb cache** - HW JPEG decode -> pre-scaled raw thumbs
+   persisted on eMMC (must transcode progressive sources, see baseline
+   note above); then the UI art provider hook in pact_boot.
 2. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
    owns volumes; DMA double-buffered bridge for ~24 MB/s.
 3. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named

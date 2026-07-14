@@ -41,6 +41,11 @@ static pcm_ring_t ring;
 
 static TaskHandle_t audio_task_handle;
 
+/* The library: scanned and owned by storage_task, consumed by ui_task
+ * once lib_ready flips. */
+static library_t lib;
+static volatile bool lib_ready;
+
 /* ---- audio task ---------------------------------------------------------- */
 
 /* ISR-context hook: a DMA half was consumed, wake the pump. */
@@ -97,8 +102,9 @@ static void ui_task_fn(void *arg)
             vTaskDelay(portMAX_DELAY);
     }
 
-    static library_t lib;
-    library_load(&lib, "1:/pact.idx");  /* storage_task owns scanning later */
+    while (!lib_ready)                  /* storage_task is scanning */
+        vTaskDelay(pdMS_TO_TICKS(50));
+
     ui_set_library(&lib, NULL);         /* TODO: art provider = thumb cache */
     ui_set_on_play(device_play);
     ui_init();
@@ -113,8 +119,21 @@ static void ui_task_fn(void *arg)
 static void storage_task_fn(void *arg)
 {
     (void)arg;
-    storage_mount_all();
-    /* TODO(backend #3): FatFs library scan -> index -> hand to the UI. */
+    storage_status_t st = storage_mount_all();
+
+    /* Music home = eMMC ("1:"); fall back to the card. Merging both
+     * volumes into one library is a later step. An empty or missing
+     * volume publishes an empty library; no storage at all leaves the
+     * UI waiting (bring-up bench state - debug over SWD/UART). */
+    const char *root = st.emmc_mounted ? "1:" : (st.sd_mounted ? "0:" : NULL);
+    if (root) {
+        library_scan(&lib, root);
+        if (st.emmc_mounted)
+            library_save(&lib, "1:/pact.idx");  /* fast-boot cache, later */
+        lib_ready = true;
+    }
+
+    /* TODO: rescan on SD insert (SD_CD EXTI) and after USB MSC detach. */
     for (;;)
         vTaskDelay(portMAX_DELAY);
 }

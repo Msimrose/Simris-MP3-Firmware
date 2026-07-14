@@ -36,3 +36,7 @@ target_link_libraries(decode_test PRIVATE m pthread)
 file(GLOB APP_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
 add_executable(library_test library_test.c ${APP_LIB_SRC} ${APP_CORE_SRC})
 target_include_directories(library_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../App)
+
+# Device storage stack (FatFs scan + pact_io) on a disk image - own dir
+# because it must NOT inherit PACT_SIM.
+add_subdirectory(fatfs_test)
