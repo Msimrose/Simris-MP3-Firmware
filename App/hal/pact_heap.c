@@ -24,7 +24,10 @@
 #include <errno.h>
 #include <stddef.h>
 
-#define PACT_HEAP_SIZE (192u * 1024u)
+/* 256K: the thumb cache builder's full-size RGB888 target (232px = 162K)
+ * must fit alongside the library index. AXI budget check: 64K LVGL pool +
+ * 256K here + 115K display buffers = 435K of 512K. */
+#define PACT_HEAP_SIZE (256u * 1024u)
 
 PACT_AXI static uint8_t heap_arena[PACT_HEAP_SIZE] __attribute__((aligned(8)));
 

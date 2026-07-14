@@ -28,6 +28,7 @@
 #include "ff.h"
 #include "diskio.h"
 #include "library/library.h"
+#include "library/thumbcache.h"
 #include "pact_io.h"
 #include "host_walk.h"
 
@@ -246,6 +247,77 @@ int main(int argc, char **argv)
                                         ? t->t.art_size : 0));
         break;
     }
+
+    /* thumb cache: build, then verify every size for every BASELINE-JPEG
+     * album (PNG folder art and progressive JPEG are known-skipped -
+     * TJPGD and the H7 HW codec both reject progressive) */
+    size_t built = thumbcache_build(&lib, "0:/.pactart");
+    size_t jpeg_albums = 0, skipped_src = 0;
+    for (size_t a = 0; a < lib.album_count; a++) {
+        const track_t *t = &lib.tracks[lib.albums[a].first];
+        if (t->t.art_kind == ART_NONE) continue;
+
+        /* walk the JPEG markers: SOF0/SOF1 = decodable, SOF2 = progressive */
+        bool baseline = false;
+        pact_file_t *sf = pact_open(t->t.art_kind == ART_EMBEDDED
+                                        ? t->path : t->folder_art);
+        if (sf) {
+            uint64_t off = t->t.art_kind == ART_EMBEDDED ? t->t.art_offset : 0;
+            uint8_t m[4];
+            pact_seek(sf, off);
+            if (pact_read(sf, m, 2) == 2 && m[0] == 0xFF && m[1] == 0xD8) {
+                uint64_t p = off + 2;
+                for (int hop = 0; hop < 64; hop++) {
+                    pact_seek(sf, p);
+                    if (pact_read(sf, m, 4) != 4 || m[0] != 0xFF) break;
+                    if (m[1] == 0xC0 || m[1] == 0xC1) { baseline = true; break; }
+                    if (m[1] == 0xC2 || m[1] == 0xDA) break;  /* prog / SOS */
+                    p += 2 + (uint64_t)((m[2] << 8) | m[3]);
+                }
+            }
+            pact_close(sf);
+        }
+        if (!baseline) { skipped_src++; continue; }
+        jpeg_albums++;
+
+        for (int s = 0; s < PACT_THUMB_SIZE_COUNT; s++) {
+            int px = pact_thumb_sizes[s];
+            char pb[96];
+            const char *tp = thumbcache_file(&lib, a, px, "0:/.pactart",
+                                             pb, sizeof pb);
+            CHECK(tp != NULL, "missing thumb: album %zu px %d", a, px);
+            if (!tp) continue;
+            pact_file_t *tf = pact_open(tp);
+            uint8_t hdr[54];
+            bool hdr_ok = tf && pact_read(tf, hdr, 54) == 54 &&
+                          hdr[0] == 'B' && hdr[1] == 'M';
+            CHECK(hdr_ok, "bad BMP header: %s", pb);
+            if (hdr_ok) {
+                uint32_t w = hdr[18] | (hdr[19] << 8);
+                uint32_t h = hdr[22] | (hdr[23] << 8);
+                uint16_t bpp = hdr[28];
+                CHECK((int)w == px && (int)h == px && bpp == 24,
+                      "thumb %s is %ux%u/%u, want %d", pb, w, h, bpp, px);
+                /* middle row should contain actual image data */
+                uint32_t stride = ((w * 3) + 3u) & ~3u;
+                static uint8_t rowbuf[1024];
+                pact_seek(tf, 54 + (uint64_t)stride * (h / 2));
+                size_t rn = pact_read(tf, rowbuf, stride);
+                bool varied = false;
+                for (size_t i = 3; i < rn && !varied; i++)
+                    if (rowbuf[i] != rowbuf[i % 3]) varied = true;
+                CHECK(varied, "thumb %s middle row is flat", pb);
+            }
+            if (tf) pact_close(tf);
+        }
+    }
+    CHECK(built == jpeg_albums * PACT_THUMB_SIZE_COUNT,
+          "built %zu thumbs, expected %zu (%zu JPEG albums x %d sizes)",
+          built, jpeg_albums * PACT_THUMB_SIZE_COUNT, jpeg_albums,
+          PACT_THUMB_SIZE_COUNT);
+    printf("\nthumb cache: %zu BMPs built for %zu baseline-JPEG albums "
+           "(of %zu; %zu skipped: progressive/PNG sources)\n",
+           built, jpeg_albums, lib.album_count, skipped_src);
 
     library_free(&lib);
     library_free(&lib2);

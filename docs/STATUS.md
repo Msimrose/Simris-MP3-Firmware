@@ -184,14 +184,45 @@ what remains. Written at the end of the first major build push (branches
   ⚠ PACT_BAT_DIV assumes a 2:1 divider - the divider is NOT yet wired on
   the schematic (open preflight item); set the real ratio at reconcile.
 
+### Thumb cache (host-VERIFIED on the exFAT image, incl. visual check)
+- `App/library/thumbcache.c/h` (portable, !PACT_SIM): built by
+  storage_task after the scan. Per album-with-art: decode the source JPEG
+  once with TJPGD (CPU, at scan time - the HW JPEG peripheral stays
+  reserved for video), largest 1/2^n prescale covering the target,
+  centered square crop, nearest-neighbor into a full RGB888 buffer,
+  written as classic bottom-up 24-bit BMP:
+  `1:/.pactart/<hash8>_<px>.bmp`, keyed by first-track path hash (same
+  keying as the sim's sips cache). Sizes {56,180,190,232} =
+  `pact_thumb_sizes[]`, keep in sync with the ui_art_provider callers.
+- BMP-only works for BOTH consumers with zero UI changes: lv_image gets
+  "A:<path>.bmp" via the LVGL FatFs driver + BMP decoder (now enabled for
+  device: LV_USE_FS_FATFS letter 'A', LV_USE_BMP; sim untouched), and the
+  carousel's ".bmp"-twin extension swap is a no-op on a .bmp path.
+  `device_art()` in pact_boot is the provider; lib_ready flips BEFORE the
+  build so first boot comes up art-less and covers fill in.
+- Known-skipped sources (thumb just doesn't exist, UI shows its
+  placeholder): progressive JPEG (TJPGD and the H7 HW codec both reject
+  it - the desktop sync tool should transcode; the demo gallery's
+  Minecraft album is exactly this) and PNG folder art (TODO lodepng).
+  Nearest-neighbor is bring-up quality; box filter or DMA2D bilinear is
+  the Phase-8 upgrade - bump PACT_THUMB_VERSION to force a rebuild.
+- Vendored-tree changes to remember: LVGL `tjpgdcnf.h` JD_USE_SCALE 0->1
+  (an LVGL update would revert it; jd_decomp(scale=0) callers unaffected)
+  and the lv_conf.h flags above. malloc arena grew 192K->256K for the
+  232px RGB888 target (162K) alongside the library index.
+- **VERIFIED in fatfs_test**: 32 BMPs for 8 baseline-JPEG albums (1
+  progressive correctly skipped - the test walks JPEG markers, SOF0/1 vs
+  SOF2, to know what to expect), per-size dimension + header + non-flat
+  pixel checks, full run 1.2 s. Two 232px thumbs extracted from the image
+  (hdiutil attach) and eyeballed: correct colors (no BGR swap), correct
+  orientation, centered crop, Mk.gee cover clearly recognizable.
+
 ### Device build
 - Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver
-  + boot + display) compiles and links with the CubeMX core: **~1046 KB
-  flash (51%), DTCM 83K/128K (64K RTOS heap + app bss), AXI 368K/512K
-  (64K LVGL pool + 192K malloc arena + 115K display buffers), D2
-  144K/288K (16K SAI DMA + 128K PCM ring)**. Flash grew ~136K at display
-  registration: the RGB565 render paths only link once a real display
-  exists, so the budget is honest now.
+  + boot + display) compiles and links with the CubeMX core: **~1042 KB
+  flash (51%), DTCM 84K/128K (64K RTOS heap + app bss), AXI 433K/512K
+  (64K LVGL pool + 256K malloc arena + 115K display buffers), D2
+  144K/288K (16K SAI DMA + 128K PCM ring)**.
 - Linker: `.axi_bss` / `.d2_bss` sections added to STM32H743XX_FLASH.ld
   (a CubeMX regen may rewrite the .ld: re-add if so). `App/pact_mem.h`
   has the placement macros. A regen also rewrites main.c USER CODE
@@ -203,12 +234,9 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **On-device thumb cache** - HW JPEG decode -> pre-scaled raw thumbs
-   persisted on eMMC (must transcode progressive sources, see baseline
-   note above); then the UI art provider hook in pact_boot.
-2. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
+1. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
    owns volumes; DMA double-buffered bridge for ~24 MB/s.
-3. **Audio polish**: gapless (engine APIs already expose exact lengths),
+2. **Audio polish**: gapless (engine APIs already expose exact lengths),
    UI sounds mixer (Micah's sound design, later).
 
 ### UI

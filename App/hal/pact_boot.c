@@ -27,8 +27,11 @@
 #include "audio/audio_out.h"
 #include "audio/pcm_ring.h"
 #include "library/library.h"
+#include "library/thumbcache.h"
 #include "storage/storage.h"
 #include "ui/ui.h"
+
+#include <stdio.h>
 
 #include "main.h"
 #include "FreeRTOS.h"
@@ -47,6 +50,21 @@ static TaskHandle_t audio_task_handle;
  * once lib_ready flips. */
 static library_t lib;
 static volatile bool lib_ready;
+
+#define PACT_ART_DIR "1:/.pactart"
+
+/* ui_art_provider for the device: pre-scaled BMP thumbs from the cache.
+ * "A:" = the LVGL FatFs driver for lv_image paths; the carousel strips
+ * the drive prefix and reads the same file through pact_io. */
+static const char *device_art(size_t album_idx, int px)
+{
+    static char lv_path[112];
+    char p[96];
+    if (!thumbcache_file(&lib, album_idx, px, PACT_ART_DIR, p, sizeof p))
+        return NULL;
+    snprintf(lv_path, sizeof lv_path, "A:%s", p);
+    return lv_path;
+}
 
 /* ---- audio task ---------------------------------------------------------- */
 
@@ -107,7 +125,7 @@ static void ui_task_fn(void *arg)
     while (!lib_ready)                  /* storage_task is scanning */
         vTaskDelay(pdMS_TO_TICKS(50));
 
-    ui_set_library(&lib, NULL);         /* TODO: art provider = thumb cache */
+    ui_set_library(&lib, device_art);
     ui_set_on_play(device_play);
     ui_init();
 
@@ -156,7 +174,10 @@ static void storage_task_fn(void *arg)
         library_scan(&lib, root);
         if (st.emmc_mounted)
             library_save(&lib, "1:/pact.idx");  /* fast-boot cache, later */
-        lib_ready = true;
+        lib_ready = true;                       /* UI comes up art-less... */
+        if (st.emmc_mounted)
+            thumbcache_build(&lib, PACT_ART_DIR); /* ...thumbs fill in after
+                                                     (first boot only) */
     }
 
     /* TODO: rescan on SD insert (SD_CD EXTI) and after USB MSC detach. */
