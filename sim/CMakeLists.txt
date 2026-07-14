@@ -19,7 +19,7 @@ file(GLOB APP_AUDIO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/audio/*.c)
 file(GLOB APP_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/*.c)
 file(GLOB APP_LIBRARY_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../App/library/*.c)
 
-add_executable(pact_sim main.c ${APP_UI_SRC} ${APP_AUDIO_SRC} ${APP_LIBRARY_SRC} ${APP_CORE_SRC})
+add_executable(pact_sim main.c sdl_driver.c ${APP_UI_SRC} ${APP_AUDIO_SRC} ${APP_LIBRARY_SRC} ${APP_CORE_SRC})
 target_include_directories(pact_sim PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../App
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib)

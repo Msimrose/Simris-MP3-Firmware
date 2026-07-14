@@ -15,6 +15,7 @@
  *   --screen albums   with --shot: jump to a screen first
  */
 #include "lvgl.h"
+#include "sdl_driver.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,15 +179,17 @@ int main(int argc, char **argv)
     const char *play_path = NULL;
     const char *lib_dir = NULL;
     const char *jump_screen = NULL;
-    float zoom = 1.0f;
+    bool big_window = false;
     static char saved_lib[512];
 
+    for (int i = 1; i < argc; i++)
+        if (strcmp(argv[i], "--big") == 0) big_window = true;
     for (int i = 1; i < argc - 1; i++) {
         if (strcmp(argv[i], "--shot") == 0)    shot_path = argv[i + 1];
         if (strcmp(argv[i], "--play") == 0)    play_path = argv[i + 1];
         if (strcmp(argv[i], "--library") == 0) lib_dir = argv[i + 1];
         if (strcmp(argv[i], "--screen") == 0)  jump_screen = argv[i + 1];
-        if (strcmp(argv[i], "--zoom") == 0)    zoom = (float)atof(argv[i + 1]);
+
         if (strcmp(argv[i], "--datafont") == 0) {
             const char *f = argv[i + 1];
             if      (strcmp(f, "scotch")  == 0) pact_font_data = &scotch_mono_16;
@@ -212,18 +215,14 @@ int main(int argc, char **argv)
         if (!lib_dir || !lib_dir[0]) lib_dir = "/tmp/pact-demo";
     }
 
-    /* Retina: at 1:1, scale the 600x450 framebuffer nearest-neighbor so the
-     * window stays pixel-crisp. When zoomed (e.g. true-physical-size
-     * preview), use linear filtering: fractional scales look better soft. */
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, zoom == 1.0f ? "0" : "1");
-
     lv_init();
     lv_tick_set_cb(SDL_GetTicks);
 
-    lv_display_t *disp = lv_sdl_window_create(600, 450);
-    lv_sdl_window_set_title(disp, "Pact MP-1");
-    if (zoom != 1.0f) lv_sdl_window_set_zoom(disp, zoom);
-    lv_indev_t *kb = lv_sdl_keyboard_create();
+    /* HiDPI 1:1 window by default (pixel-exact, near device size);
+     * --big = 2x nearest-neighbor for demos */
+    lv_display_t *disp = pact_sdl_display_create(600, 450, big_window);
+    (void)disp;
+    lv_indev_t *kb = pact_sdl_keyboard_create();
 
     library_scan(&lib, lib_dir);
     printf("library: %zu tracks, %zu albums from %s\n", lib.count,
