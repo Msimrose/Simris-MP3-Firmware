@@ -47,6 +47,7 @@ file(GLOB_RECURSE LVGL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl/src/*.c)
 file(GLOB APP_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/App/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/audio/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/hal/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/library/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/storage/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/*.c

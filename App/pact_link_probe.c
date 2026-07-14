@@ -12,6 +12,7 @@
 #include "lvgl.h"
 #include "ui/ui_internal.h"
 #include "audio/audio_engine.h"
+#include "audio/audio_out.h"
 #include "library/library.h"
 #include "storage/storage.h"
 
@@ -28,8 +29,11 @@ void pact_link_probe(void)
     ui_set_library(&lib, NULL);
     ui_init();
     audio_engine_init(&ring);
+    audio_out_init(&ring);
     audio_engine_play("0:/test.flac");
+    audio_out_start(44100);
     while (audio_engine_pump()) {}
+    audio_out_stop();
     ui_handle_event(PACT_EVT_CENTER);
     ui_nowplaying_refresh();
 }

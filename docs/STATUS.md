@@ -72,12 +72,32 @@ what remains. Written at the end of the first major build push (branches
   `App/storage/diskio_sdmmc.c`: SDMMC1 = microSD = "0:", SDMMC2 = eMMC =
   "1:", polling first (DMA+MPU is a Phase-2 perf step).
 
+### SAI output driver (compiles for device; sounds at hardware bring-up)
+- `App/hal/sai_out.c` + `App/audio/audio_out.h`: ring consumer on
+  SAI1/DMA1_Stream1 circular DMA (2x 1024-frame halves, 16 KB in `.d2_bss`
+  at 0x30000000). Underrun = zero-fill (never stale samples) + counter;
+  ISR wakeup hook ready for the audio_task notification (DMA IRQ prio 5 =
+  max-syscall, so FromISR calls are legal in the hook).
+- Pop-free sequencing per spec section 7: PWR5V_EN -> settle -> BCK runs
+  zeros -> DAC lock -> XSMT high -> ramp -> AMP_EN; exact reverse on stop.
+  Rate switches keep the +/-5V rails up and go through a full mute.
+- Clocking: NODIV=1 so SCK = kernel/MCKDIV, fs = SCK/64 - exact division
+  for every rate 8k..192k in both families. 44.1k family = PLL2P
+  11.2896 MHz (mux-only; PLL2 also feeds the ADC, NEVER reconfigure it).
+  48k family = PLL3P 12.288 MHz (M=25 N=393 FRACN=1769 P=32) - CubeMX
+  solved these but generates no PLL3 code; brought up at runtime on first
+  use via HAL_RCCEx_PeriphCLKConfig (this HAL has no HAL_RCCEx_EnablePLL3),
+  then left running so later family switches are mux-only.
+- Each refilled half is explicitly cache-cleaned, so the driver is correct
+  both before and after the MPU non-cacheable D2 region lands (boot wiring).
+
 ### Device build
-- Whole app (LVGL + fonts + UI + decoders + library + FatFs) compiles and
-  links into the firmware image with the CubeMX core: **~900 KB flash
-  (44%), DTCM 83K/128K, LVGL 64K pool in AXI** (`.axi_bss`), D2 reserved
-  for PCM ring + SDMMC buffers. Link probe in `main.c` USER CODE 2 keeps
-  the call graph honest (replace with real boot at bring-up).
+- Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver)
+  compiles and links into the firmware image with the CubeMX core:
+  **~910 KB flash (44%), DTCM 83K/128K, LVGL 64K pool in AXI**
+  (`.axi_bss`), 16K of D2 in use (SAI DMA buffer; rest reserved for PCM
+  ring + SDMMC buffers). Link probe in `main.c` USER CODE 2 keeps the
+  call graph honest (replace with real boot at bring-up).
 - Linker: `.axi_bss` / `.d2_bss` sections added to STM32H743XX_FLASH.ld
   (a CubeMX regen may rewrite the .ld: re-add if so). `App/pact_mem.h`
   has the placement macros.
@@ -87,14 +107,12 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **SAI output driver** - device ring consumer on DMA1_Stream1
-   half/complete callbacks; pop-free sequencing (PWR5V_EN -> clocks ->
-   XSMT high -> AMP_EN, reverse on stop); runtime PLL2<->PLL3 SAI kernel
-   mux switch per track sample-rate family.
-2. **Real boot wiring + MPU** - replace link probe: FreeRTOS tasks
+1. **Real boot wiring + MPU** - replace link probe: FreeRTOS tasks
    (audio/ui/input/storage/power per firmware-spec section 10), MPU
-   non-cacheable D2 region, PWR_HOLD first thing in main.
-3. **Display driver** - RM690B0 over QUADSPI. ⚠ Use the OFFICIAL Startek
+   non-cacheable D2 region, PWR_HOLD first thing in main. Wire the
+   audio_task pump to audio_out_set_wakeup (vTaskNotifyGiveFromISR) and
+   allocate the PCM ring in D2 (PACT_D2).
+2. **Display driver** - RM690B0 over QUADSPI. ⚠ Use the OFFICIAL Startek
    init from `~/Downloads/KD024EGOIN152-01 SPEC V0.pdf` section 6.3
    ("Power on Initial Code For MCU"), NOT the LilyGO port (LilyGO was only
    ever a reference for the same RM690B0 controller IC; the panel spec
@@ -105,16 +123,16 @@ what remains. Written at the end of the first major build push (branches
    sleep-out 0x11 + 120ms / display-on 0x29. Power-off, Idle (0x39/0x38)
    and HBM (0x66) sequences also in section 6.3. Panel native 450x600
    portrait; UI renders 600x450 landscape (rotate via MADCTL or in blit).
-4. **Library scan over FatFs** - port scan_dir to f_opendir/f_readdir
+3. **Library scan over FatFs** - port scan_dir to f_opendir/f_readdir
    (parsers already portable); on-device thumb cache generation
    (HW JPEG decode -> pre-scaled raw thumbs; must transcode progressive
    sources, see baseline note above).
-5. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
+4. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
    owns volumes; DMA double-buffered bridge for ~24 MB/s.
-6. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named
+5. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named
    events (the UI already consumes `pact_event_t` only), battery ADC
    (sampling time fix needed: 1.5 cyc too short) + LiPo LUT, sleep/wake.
-7. **Audio polish**: gapless (engine APIs already expose exact lengths),
+6. **Audio polish**: gapless (engine APIs already expose exact lengths),
    UI sounds mixer (Micah's sound design, later).
 
 ### UI
