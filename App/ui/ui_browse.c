@@ -153,7 +153,7 @@ static void tracks_paint(void)
      * only steps when the selection would leave the fully visible band */
     if (trk_sel < trk_top) trk_top = trk_sel;
     if (trk_sel > trk_top + TRK_VISIBLE - 1) trk_top = trk_sel - (TRK_VISIBLE - 1);
-    lv_obj_scroll_to_y(trk_list, trk_top * TRK_PITCH, LV_ANIM_ON);
+    lv_obj_scroll_to_y(trk_list, trk_top * TRK_PITCH, LV_ANIM_OFF);  /* iPod: instant step */
 }
 
 void ui_tracks_event(pact_event_t evt)
