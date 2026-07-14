@@ -35,7 +35,7 @@ static lv_obj_t *menu_labels[MENU_COUNT];
 static lv_obj_t *menu_chevrons[MENU_COUNT];
 static int       menu_sel;
 
-static lv_obj_t *batt_shell, *batt_fill, *batt_label;
+static lv_obj_t *batt_img;
 static int       batt_pct = 84;
 static bool      batt_chg = false;
 
@@ -48,8 +48,7 @@ lv_obj_t *ui_screen_new(void)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    batt_fill = NULL;  /* chrome belongs to the old screen until recreated */
-    batt_label = NULL;
+    batt_img = NULL;   /* chrome belongs to the old screen until recreated */
     return scr;
 }
 
@@ -99,34 +98,9 @@ void ui_brand_mark(lv_obj_t *parent, int x, int y)
 
 void ui_battery_create_at(lv_obj_t *parent, int32_t y)
 {
-    /* Figma: 30x14 shell, 1.5px warm-white border r3, 18x8 fill, 2.5x6 nub */
-    batt_shell = lv_obj_create(parent);
-    lv_obj_set_size(batt_shell, 30, 14);
-    lv_obj_set_pos(batt_shell, 546, y);
-    lv_obj_set_style_bg_opa(batt_shell, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(batt_shell, PACT_COL_TEXT, 0);
-    lv_obj_set_style_border_width(batt_shell, 1, 0);
-    lv_obj_set_style_radius(batt_shell, 3, 0);
-    lv_obj_set_style_pad_hor(batt_shell, 2, 0);
-    lv_obj_set_style_pad_ver(batt_shell, 2, 0);
-    lv_obj_clear_flag(batt_shell, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *nub = lv_obj_create(parent);
-    lv_obj_set_size(nub, 3, 6);
-    lv_obj_set_pos(nub, 577, y + 4);
-    lv_obj_set_style_bg_color(nub, PACT_COL_TEXT, 0);
-    lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(nub, 0, 0);
-    lv_obj_set_style_radius(nub, 1, 0);
-
-    batt_fill = lv_obj_create(batt_shell);
-    lv_obj_set_size(batt_fill, lv_pct(100), 8);
-    lv_obj_align(batt_fill, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_bg_color(batt_fill, PACT_COL_TEXT, 0);
-    lv_obj_set_style_bg_opa(batt_fill, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(batt_fill, 0, 0);
-    lv_obj_set_style_radius(batt_fill, 1, 0);
-
+    /* Phosphor battery glyph, right edge anchored where the old shell sat */
+    batt_img = lv_image_create(parent);
+    lv_obj_set_pos(batt_img, 548, y - 2);
     ui_set_battery(batt_pct, batt_chg);
 }
 
@@ -139,14 +113,21 @@ void ui_set_battery(int percent, bool charging)
 {
     batt_pct = percent < 0 ? 0 : percent > 100 ? 100 : percent;
     batt_chg = charging;
-    if (!batt_fill || !lv_obj_is_valid(batt_fill)) return;
-    lv_obj_set_width(batt_fill, lv_pct(batt_pct));
-    lv_obj_set_style_bg_color(batt_fill,
-                              batt_pct < 15 ? PACT_COL_BATT_LOW : PACT_COL_WHITE, 0);
-    if (batt_label && lv_obj_is_valid(batt_label)) {
-        lv_label_set_text_fmt(batt_label, batt_chg ? "%d%% +" : "%d%%", batt_pct);
-        lv_obj_align_to(batt_label, batt_shell, LV_ALIGN_OUT_LEFT_MID, -10, 0);
-    }
+    if (!batt_img || !lv_obj_is_valid(batt_img)) return;
+
+    const lv_image_dsc_t *icon;
+    if (batt_chg)              icon = &batt_icon_charging;
+    else if (batt_pct <= 10)   icon = &batt_icon_empty;
+    else if (batt_pct <= 35)   icon = &batt_icon_low;
+    else if (batt_pct <= 65)   icon = &batt_icon_medium;
+    else if (batt_pct <= 90)   icon = &batt_icon_high;
+    else                       icon = &batt_icon_full;
+    lv_image_set_src(batt_img, icon);
+
+    /* the one allowed shout: red under 15% (and not charging) */
+    bool low = !batt_chg && batt_pct < 15;
+    lv_obj_set_style_image_recolor(batt_img, PACT_COL_BATT_LOW, 0);
+    lv_obj_set_style_image_recolor_opa(batt_img, low ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
 }
 
 /* ---- key plumbing ------------------------------------------------------- */

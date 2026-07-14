@@ -133,6 +133,12 @@ static size_t     trk_count;
 static size_t     trk_first;
 static int        trk_sel;
 
+static lv_obj_t *trk_list;
+static int       trk_top;   /* first fully visible row */
+
+#define TRK_PITCH   42      /* 34px row + 8px gap */
+#define TRK_VISIBLE 9       /* full rows in the 402px viewport */
+
 static void tracks_paint(void)
 {
     for (size_t i = 0; i < trk_count; i++) {
@@ -143,7 +149,11 @@ static void tracks_paint(void)
         lv_obj_set_style_text_color(trk_nums[i],
                                     sel ? PACT_COL_TEXT : PACT_COL_TEXT_DIM, 0);
     }
-    lv_obj_scroll_to_view(trk_rows[trk_sel], LV_ANIM_ON);
+    /* iPod-style: the selection walks the visible rows; the list itself
+     * only steps when the selection would leave the fully visible band */
+    if (trk_sel < trk_top) trk_top = trk_sel;
+    if (trk_sel > trk_top + TRK_VISIBLE - 1) trk_top = trk_sel - (TRK_VISIBLE - 1);
+    lv_obj_scroll_to_y(trk_list, trk_top * TRK_PITCH, LV_ANIM_ON);
 }
 
 void ui_tracks_event(pact_event_t evt)
@@ -173,6 +183,7 @@ void ui_show_tracks(size_t album_idx)
     trk_first = al->first;
     trk_count = al->count;
     trk_sel = 0;
+    trk_top = 0;
 
     free(trk_rows);
     free(trk_nums);
@@ -223,6 +234,7 @@ void ui_show_tracks(size_t album_idx)
 
     /* right column: rows of 34px on a 42px pitch, x264..566 */
     lv_obj_t *list = lv_obj_create(scr);
+    trk_list = list;
     lv_obj_set_size(list, 302, 450 - 48);
     lv_obj_set_pos(list, 264, 48);
     lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);

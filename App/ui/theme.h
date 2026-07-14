@@ -48,4 +48,12 @@ extern const lv_font_t *pact_font_data;   /* sim --datafont trial hook */
 /* Brand wordmark, 94x12, baked from the Figma asset */
 LV_IMAGE_DECLARE(simris_logo);
 
+/* Phosphor battery states, 31x18, warm white with coverage alpha */
+LV_IMAGE_DECLARE(batt_icon_empty);
+LV_IMAGE_DECLARE(batt_icon_low);
+LV_IMAGE_DECLARE(batt_icon_medium);
+LV_IMAGE_DECLARE(batt_icon_high);
+LV_IMAGE_DECLARE(batt_icon_full);
+LV_IMAGE_DECLARE(batt_icon_charging);
+
 #define PACT_ANIM_MS 180
