@@ -72,6 +72,9 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     LV_CONF_INCLUDE_SIMPLE
 )
 
+# newlib heap lives in AXI SRAM (App/hal/pact_heap.c) - reroute _sbrk there
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -Wl,--wrap=_sbrk)
+
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 

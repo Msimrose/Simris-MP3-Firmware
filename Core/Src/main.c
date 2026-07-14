@@ -105,7 +105,36 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  /* Power latch first (firmware-spec section 11): PWR_HOLD (PE15) high
+   * before anything else so a short power-button press survives boot.
+   * Raw registers - HAL is not initialized yet. MX_GPIO_Init re-inits the
+   * pin later and writes it high again before touching the mode. */
+  RCC->AHB4ENR |= RCC_AHB4ENR_GPIOEEN;
+  (void)RCC->AHB4ENR;
+  GPIOE->BSRR = GPIO_PIN_15;
+  MODIFY_REG(GPIOE->MODER, GPIO_MODER_MODE15, GPIO_MODER_MODE15_0);
 
+  /* D2 SRAM1+SRAM2 non-cacheable (firmware-spec section 6): all DMA
+   * buffers (.d2_bss - SAI DMA halves, PCM ring, SDMMC) live here, so DMA
+   * and the CPU agree without per-transfer cache maintenance. Region 1;
+   * the generated MPU_Config() below adds region 0 and enables the MPU
+   * before the caches come up. D2 SRAM3 (0x30040000, 32 KB) stays
+   * cacheable and is NOT covered - keep .d2_bss under 256 KB. */
+  {
+    MPU_Region_InitTypeDef r = {0};
+    r.Enable = MPU_REGION_ENABLE;
+    r.Number = MPU_REGION_NUMBER1;
+    r.BaseAddress = 0x30000000;
+    r.Size = MPU_REGION_SIZE_256KB;
+    r.SubRegionDisable = 0x00;
+    r.TypeExtField = MPU_TEX_LEVEL1;          /* normal, non-cacheable */
+    r.AccessPermission = MPU_REGION_FULL_ACCESS;
+    r.DisableExec = MPU_INSTRUCTION_ACCESS_DISABLE;
+    r.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
+    r.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
+    r.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+    HAL_MPU_ConfigRegion(&r);
+  }
   /* USER CODE END 1 */
 
   /* MPU Configuration--------------------------------------------------------*/
@@ -151,14 +180,7 @@ int main(void)
   MX_USB_OTG_HS_PCD_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* Link probe: keeps the full app (LVGL/UI/decoders) in the image for
-   * honest size budgets; pact_probe_enable is always 0, nothing runs.
-   * Replaced by the real app startup at Phase 1 bring-up. */
-  {
-    extern volatile int pact_probe_enable;
-    extern void pact_link_probe(void);
-    if (pact_probe_enable) pact_link_probe();
-  }
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -185,7 +207,11 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  {
+    /* Real app startup (App/hal/pact_boot.c): audio/ui/storage tasks. */
+    extern void pact_boot_create_tasks(void);
+    pact_boot_create_tasks();
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -852,6 +878,8 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  /* App tasks are created in pact_boot_create_tasks(); nothing lives here. */
+  osThreadExit();
   /* Infinite loop */
   for(;;)
   {
