@@ -1,8 +1,7 @@
 /*
- * Pact MP-1 - Now Playing, variant NP-A "Centered" (Figma 10:2).
- * Art as the centered jewel; brand mark top-left, battery top-right,
- * one title line, quiet artist line, thin full-width progress with the
- * format badge restored between the time stamps.
+ * Pact MP-1 - Now Playing, NP-A "Centered", exact to Figma node 10:2.
+ * One deliberate addition over the mock: the format badge (FLAC · 24/48)
+ * centered between the time stamps, per the agreed variant-A brief.
  */
 #include "ui_internal.h"
 #include "../audio/audio_engine.h"
@@ -11,11 +10,11 @@
 
 #define COVER    232
 #define BAR_W    300
-#define BAR_X    150
+#define BAR_X    150   /* (600 - BAR_W) / 2 */
 #define BAR_Y    384
 
 static lv_obj_t *np_title, *np_artist, *np_badge, *np_state;
-static lv_obj_t *np_bar, *np_elapsed, *np_total;
+static lv_obj_t *np_bar_fill, *np_elapsed, *np_total;
 
 static void fmt_time(char *out, size_t cap, uint32_t ms)
 {
@@ -38,7 +37,7 @@ void ui_nowplaying_refresh(void)
 {
     if (ui_cur_screen != UI_SCR_NOWPLAYING || ui_current_track == UI_NO_TRACK)
         return;
-    if (!np_bar || !lv_obj_is_valid(np_bar)) return;
+    if (!np_bar_fill || !lv_obj_is_valid(np_bar_fill)) return;
     const track_t *tr = &ui_lib->tracks[ui_current_track];
 
     uint32_t pos_ms = (uint32_t)(audio_engine_position() * 1000.0);
@@ -50,13 +49,13 @@ void ui_nowplaying_refresh(void)
     lv_label_set_text(np_elapsed, buf);
     fmt_time(buf, sizeof(buf), tr->t.duration_ms);
     lv_label_set_text(np_total, buf);
-    lv_obj_align(np_total, LV_ALIGN_TOP_LEFT, BAR_X + BAR_W, BAR_Y + 10);
+    lv_obj_update_layout(np_total);
     lv_obj_set_x(np_total, BAR_X + BAR_W - lv_obj_get_width(np_total));
 
-    int32_t pct = tr->t.duration_ms
-                      ? (int32_t)((uint64_t)pos_ms * 100 / tr->t.duration_ms)
-                      : 0;
-    lv_bar_set_value(np_bar, pct, LV_ANIM_OFF);
+    int32_t w = tr->t.duration_ms
+                    ? (int32_t)((uint64_t)pos_ms * BAR_W / tr->t.duration_ms)
+                    : 0;
+    lv_obj_set_width(np_bar_fill, w > 3 ? w : 3);
 
     lv_label_set_text(np_state,
                       audio_engine_state() == ENGINE_PAUSED ? "paused" : "");
@@ -71,10 +70,14 @@ void ui_show_nowplaying(void)
 
     lv_obj_t *scr = ui_screen_new();
 
-    ui_brand_mark(scr, 18, 17);
-    ui_battery_create(scr);
+    /* brand wordmark (Figma 9:2 placement) + battery */
+    lv_obj_t *logo = lv_image_create(scr);
+    lv_image_set_src(logo, &simris_logo);
+    lv_obj_set_pos(logo, 18, 17);
 
-    /* centered cover */
+    ui_battery_create_at(scr, 22);
+
+    /* centered cover, 232px, r6 */
     const char *art =
         (ui_art_provider && alb != (size_t)-1) ? ui_art_provider(alb, COVER) : NULL;
     if (art) {
@@ -93,47 +96,63 @@ void ui_show_nowplaying(void)
         lv_obj_set_style_radius(ph, 6, 0);
     }
 
+    /* title: Medium 27, warm white, centered, y298 */
     np_title = lv_label_create(scr);
     lv_label_set_text(np_title, tr->t.title);
-    lv_obj_set_style_text_font(np_title, &diatype_medium_32, 0);
+    lv_obj_set_style_text_font(np_title, &diatype_medium_27, 0);
     lv_obj_set_style_text_color(np_title, PACT_COL_TEXT, 0);
     lv_label_set_long_mode(np_title, LV_LABEL_LONG_DOT);
     lv_obj_set_width(np_title, 520);
     lv_obj_set_style_text_align(np_title, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(np_title, LV_ALIGN_TOP_MID, 0, 296);
+    lv_obj_align(np_title, LV_ALIGN_TOP_MID, 0, 298);
 
+    /* artist: Regular 15, dim, centered, y336 */
     np_artist = lv_label_create(scr);
     lv_label_set_text(np_artist, tr->t.artist);
-    lv_obj_set_style_text_font(np_artist, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(np_artist, &diatype_regular_15, 0);
     lv_obj_set_style_text_color(np_artist, PACT_COL_TEXT_DIM, 0);
     lv_label_set_long_mode(np_artist, LV_LABEL_LONG_DOT);
     lv_obj_set_width(np_artist, 400);
     lv_obj_set_style_text_align(np_artist, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(np_artist, LV_ALIGN_TOP_MID, 0, 338);
+    lv_obj_align(np_artist, LV_ALIGN_TOP_MID, 0, 336);
 
-    /* progress bar + times + badge */
-    np_bar = lv_bar_create(scr);
-    lv_obj_set_size(np_bar, BAR_W, 3);
-    lv_obj_set_pos(np_bar, BAR_X, BAR_Y);
-    lv_bar_set_range(np_bar, 0, 100);
-    lv_obj_set_style_bg_color(np_bar, PACT_COL_SELECT, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(np_bar, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(np_bar, PACT_COL_WHITE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_opa(np_bar, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(np_bar, 2, LV_PART_MAIN);
-    lv_obj_set_style_radius(np_bar, 2, LV_PART_INDICATOR);
+    /* paused state (addition): Regular 11, dim, centered above the bar */
+    np_state = lv_label_create(scr);
+    lv_obj_set_style_text_font(np_state, &diatype_regular_11, 0);
+    lv_obj_set_style_text_color(np_state, PACT_COL_TEXT_DIM, 0);
+    lv_label_set_text(np_state, "");
+    lv_obj_align(np_state, LV_ALIGN_TOP_MID, 0, 364);
 
+    /* progress: 300x3 track (warm white 16%) + warm-white fill, r2, y384 */
+    lv_obj_t *track = lv_obj_create(scr);
+    lv_obj_set_size(track, BAR_W, 3);
+    lv_obj_set_pos(track, BAR_X, BAR_Y);
+    lv_obj_set_style_bg_color(track, PACT_COL_TEXT, 0);
+    lv_obj_set_style_bg_opa(track, PACT_OPA_TRACK, 0);
+    lv_obj_set_style_border_width(track, 0, 0);
+    lv_obj_set_style_radius(track, 2, 0);
+
+    np_bar_fill = lv_obj_create(scr);
+    lv_obj_set_size(np_bar_fill, 3, 3);
+    lv_obj_set_pos(np_bar_fill, BAR_X, BAR_Y);
+    lv_obj_set_style_bg_color(np_bar_fill, PACT_COL_TEXT, 0);
+    lv_obj_set_style_bg_opa(np_bar_fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(np_bar_fill, 0, 0);
+    lv_obj_set_style_radius(np_bar_fill, 2, 0);
+
+    /* times: Regular 11, dim, y394 */
     np_elapsed = lv_label_create(scr);
-    lv_obj_set_style_text_font(np_elapsed, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(np_elapsed, &diatype_regular_11, 0);
     lv_obj_set_style_text_color(np_elapsed, PACT_COL_TEXT_DIM, 0);
     lv_obj_set_pos(np_elapsed, BAR_X, BAR_Y + 10);
 
     np_total = lv_label_create(scr);
-    lv_obj_set_style_text_font(np_total, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(np_total, &diatype_regular_11, 0);
     lv_obj_set_style_text_color(np_total, PACT_COL_TEXT_DIM, 0);
     lv_label_set_text(np_total, "0:00");
-    lv_obj_set_pos(np_total, BAR_X + BAR_W - 40, BAR_Y + 10);
+    lv_obj_set_pos(np_total, BAR_X + BAR_W - 22, BAR_Y + 10);
 
+    /* format badge (addition): Regular 11, dim, centered on the times row */
     np_badge = lv_label_create(scr);
     if (tr->t.bits_per_sample)
         lv_label_set_text_fmt(np_badge, "%s · %u/%u", ext_upper(tr->path),
@@ -141,16 +160,9 @@ void ui_show_nowplaying(void)
     else
         lv_label_set_text_fmt(np_badge, "%s · %u kHz", ext_upper(tr->path),
                               tr->t.sample_rate / 1000);
-    lv_obj_set_style_text_font(np_badge, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(np_badge, &diatype_regular_11, 0);
     lv_obj_set_style_text_color(np_badge, PACT_COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_align(np_badge, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(np_badge, LV_ALIGN_TOP_MID, 0, BAR_Y + 10);
-
-    np_state = lv_label_create(scr);
-    lv_obj_set_style_text_font(np_state, &diatype_regular_16, 0);
-    lv_obj_set_style_text_color(np_state, PACT_COL_TEXT_DIM, 0);
-    lv_label_set_text(np_state, "");
-    lv_obj_align(np_state, LV_ALIGN_TOP_MID, 0, 366);
 
     lv_obj_t *sink = lv_obj_create(scr);   /* invisible key receiver */
     lv_obj_set_size(sink, 1, 1);

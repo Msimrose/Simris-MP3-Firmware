@@ -124,13 +124,13 @@ void ui_show_albums(void)
     ui_screen_show(scr);
 }
 
-/* ---- track list -------------------------------------------------------- */
+/* ---- track list (exact to Figma 13:16) --------------------------------- */
 
 static lv_obj_t **trk_rows;
+static lv_obj_t **trk_nums;
 static lv_obj_t **trk_names;
 static size_t     trk_count;
 static size_t     trk_first;
-static size_t     trk_album;
 static int        trk_sel;
 
 static void tracks_paint(void)
@@ -138,7 +138,9 @@ static void tracks_paint(void)
     for (size_t i = 0; i < trk_count; i++) {
         bool sel = ((int)i == trk_sel);
         lv_obj_set_style_bg_opa(trk_rows[i], sel ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        lv_obj_set_style_text_color(trk_names[i],
+        lv_obj_set_style_text_font(trk_names[i],
+                                   sel ? &diatype_medium_15 : &diatype_regular_15, 0);
+        lv_obj_set_style_text_color(trk_nums[i],
                                     sel ? PACT_COL_TEXT : PACT_COL_TEXT_DIM, 0);
     }
     lv_obj_scroll_to_view(trk_rows[trk_sel], LV_ANIM_ON);
@@ -168,86 +170,104 @@ void ui_show_tracks(size_t album_idx)
 {
     ui_cur_screen = UI_SCR_TRACKS;
     const album_t *al = &ui_lib->albums[album_idx];
-    trk_album = album_idx;
     trk_first = al->first;
     trk_count = al->count;
     trk_sel = 0;
 
     free(trk_rows);
+    free(trk_nums);
     free(trk_names);
     trk_rows = calloc(trk_count, sizeof(lv_obj_t *));
+    trk_nums = calloc(trk_count, sizeof(lv_obj_t *));
     trk_names = calloc(trk_count, sizeof(lv_obj_t *));
 
     lv_obj_t *scr = ui_screen_new();
-    ui_battery_create(scr);
+    ui_battery_create_at(scr, 22);
 
-    /* header: cover + album + artist */
-    const char *art = ui_art_provider ? ui_art_provider(album_idx, 64) : NULL;
+    /* left column: cover 180 r6 + album/artist/meta */
+    const char *art = ui_art_provider ? ui_art_provider(album_idx, 180) : NULL;
     if (art) {
         lv_obj_t *cov = lv_image_create(scr);
         lv_image_set_src(cov, art);
-        lv_obj_set_size(cov, 64, 64);
-        lv_obj_align(cov, LV_ALIGN_TOP_LEFT, PAD_X, 16);
-        lv_obj_set_style_radius(cov, 4, 0);
+        lv_obj_set_size(cov, 180, 180);
+        lv_obj_set_pos(cov, 38, 52);
+        lv_obj_set_style_radius(cov, 6, 0);
         lv_obj_set_style_clip_corner(cov, true, 0);
     }
     lv_obj_t *hdr = lv_label_create(scr);
     lv_label_set_text(hdr, al->album[0] ? al->album : "(unknown album)");
-    lv_obj_set_style_text_font(hdr, &diatype_regular_24, 0);
+    lv_obj_set_style_text_font(hdr, &diatype_medium_18, 0);
     lv_obj_set_style_text_color(hdr, PACT_COL_TEXT, 0);
-    lv_obj_align(hdr, LV_ALIGN_TOP_LEFT, PAD_X + 64 + 16, 22);
+    lv_label_set_long_mode(hdr, LV_LABEL_LONG_DOT);
+    lv_obj_set_size(hdr, 200, 22);
+    lv_obj_set_pos(hdr, 38, 248);
 
     lv_obj_t *sub = lv_label_create(scr);
     lv_label_set_text(sub, al->artist[0] ? al->artist : "(unknown)");
-    lv_obj_set_style_text_font(sub, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(sub, &diatype_regular_14, 0);
     lv_obj_set_style_text_color(sub, PACT_COL_TEXT_DIM, 0);
-    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, PAD_X + 64 + 16, 54);
+    lv_label_set_long_mode(sub, LV_LABEL_LONG_DOT);
+    lv_obj_set_size(sub, 200, 18);
+    lv_obj_set_pos(sub, 38, 272);
 
+    uint64_t total_ms = 0;
+    for (size_t i = 0; i < trk_count; i++)
+        total_ms += ui_lib->tracks[trk_first + i].t.duration_ms;
+    lv_obj_t *meta = lv_label_create(scr);
+    lv_label_set_text_fmt(meta, "%zu TRACKS · %u MIN", trk_count,
+                          (unsigned)(total_ms / 60000));
+    lv_obj_set_style_text_font(meta, &diatype_regular_11, 0);
+    lv_obj_set_style_text_color(meta, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_text_letter_space(meta, 1, 0);
+    lv_obj_set_pos(meta, 38, 298);
+
+    /* right column: rows of 34px on a 42px pitch, x264..566 */
     lv_obj_t *list = lv_obj_create(scr);
-    lv_obj_set_size(list, 600, 450 - 96);
-    lv_obj_align(list, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(list, 302, 450 - 48);
+    lv_obj_set_pos(list, 264, 48);
     lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(list, 0, 0);
-    lv_obj_set_style_pad_left(list, PAD_X - 16, 0);
-    lv_obj_set_style_pad_right(list, PAD_X - 16, 0);
+    lv_obj_set_style_pad_all(list, 0, 0);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(list, 2, 0);
+    lv_obj_set_style_pad_row(list, 8, 0);
     lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
 
     for (size_t i = 0; i < trk_count; i++) {
         const track_t *tr = &ui_lib->tracks[trk_first + i];
 
         lv_obj_t *row = lv_obj_create(list);
-        lv_obj_set_size(row, lv_pct(100), TROW_H);
+        lv_obj_set_size(row, lv_pct(100), 34);
         lv_obj_set_style_bg_color(row, PACT_COL_SELECT, 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(row, 0, 0);
-        lv_obj_set_style_radius(row, 8, 0);
-        lv_obj_set_style_pad_left(row, 16, 0);
-        lv_obj_set_style_pad_right(row, 16, 0);
+        lv_obj_set_style_radius(row, 4, 0);
+        lv_obj_set_style_pad_left(row, 8, 0);
+        lv_obj_set_style_pad_right(row, 14, 0);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *no = lv_label_create(row);
-        lv_label_set_text_fmt(no, "%u", tr->t.track_no);
-        lv_obj_set_style_text_font(no, &diatype_regular_16, 0);
+        lv_label_set_text_fmt(no, "%02u", tr->t.track_no);
+        lv_obj_set_style_text_font(no, &diatype_regular_11, 0);
         lv_obj_set_style_text_color(no, PACT_COL_TEXT_DIM, 0);
         lv_obj_align(no, LV_ALIGN_LEFT_MID, 0, 0);
 
         lv_obj_t *name = lv_label_create(row);
         lv_label_set_text(name, tr->t.title);
-        lv_obj_set_style_text_font(name, &diatype_regular_22, 0);
-        lv_obj_align(name, LV_ALIGN_LEFT_MID, 32, 0);
+        lv_obj_set_style_text_font(name, &diatype_regular_15, 0);
+        lv_obj_set_style_text_color(name, PACT_COL_TEXT, 0);
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
-        lv_obj_set_width(name, 600 - PAD_X * 2 - 32 - 72);
+        lv_obj_set_size(name, 302 - 42 - 14 - 44, 19);
+        lv_obj_align(name, LV_ALIGN_LEFT_MID, 34, 0);
 
         lv_obj_t *dur = lv_label_create(row);
         lv_label_set_text_fmt(dur, "%u:%02u", tr->t.duration_ms / 60000,
                               (tr->t.duration_ms / 1000) % 60);
-        lv_obj_set_style_text_font(dur, &diatype_regular_16, 0);
+        lv_obj_set_style_text_font(dur, &diatype_regular_11, 0);
         lv_obj_set_style_text_color(dur, PACT_COL_TEXT_DIM, 0);
         lv_obj_align(dur, LV_ALIGN_RIGHT_MID, 0, 0);
 
         trk_rows[i] = row;
+        trk_nums[i] = no;
         trk_names[i] = name;
     }
 

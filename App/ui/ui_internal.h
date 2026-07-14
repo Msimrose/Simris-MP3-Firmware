@@ -33,7 +33,8 @@ lv_obj_t *ui_screen_new(void);
 void      ui_screen_show(lv_obj_t *scr);
 
 /* Shared chrome */
-void ui_battery_create(lv_obj_t *parent);          /* top-right battery */
+void ui_battery_create(lv_obj_t *parent);          /* top-right battery, y=22 */
+void ui_battery_create_at(lv_obj_t *parent, int32_t y);
 void ui_brand_mark(lv_obj_t *parent, int x, int y); /* simris audio mark */
 
 /* Screen builders / event handlers */

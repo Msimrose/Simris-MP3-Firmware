@@ -46,6 +46,8 @@ lv_obj_t *ui_screen_new(void)
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, PACT_COL_GROUND, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     batt_fill = NULL;  /* chrome belongs to the old screen until recreated */
     batt_label = NULL;
     return scr;
@@ -54,7 +56,10 @@ lv_obj_t *ui_screen_new(void)
 void ui_screen_show(lv_obj_t *scr)
 {
     lv_screen_load(scr);
-    if (prev_scr && prev_scr != scr) lv_obj_delete(prev_scr);
+    /* async: the old screen may be mid-event-dispatch (the key handler that
+     * triggered this navigation lives on it); deleting it synchronously is
+     * a use-after-free when that handler unwinds */
+    if (prev_scr && prev_scr != scr) lv_obj_delete_async(prev_scr);
     prev_scr = scr;
 }
 
@@ -92,35 +97,42 @@ void ui_brand_mark(lv_obj_t *parent, int x, int y)
     lv_obj_align_to(s2, s1, LV_ALIGN_OUT_BOTTOM_RIGHT, -1, 1);
 }
 
-void ui_battery_create(lv_obj_t *parent)
+void ui_battery_create_at(lv_obj_t *parent, int32_t y)
 {
+    /* Figma: 30x14 shell, 1.5px warm-white border r3, 18x8 fill, 2.5x6 nub */
     batt_shell = lv_obj_create(parent);
     lv_obj_set_size(batt_shell, 30, 14);
-    lv_obj_align(batt_shell, LV_ALIGN_TOP_RIGHT, -24, 20);
+    lv_obj_set_pos(batt_shell, 546, y);
     lv_obj_set_style_bg_opa(batt_shell, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(batt_shell, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_style_border_color(batt_shell, PACT_COL_TEXT, 0);
     lv_obj_set_style_border_width(batt_shell, 1, 0);
-    lv_obj_set_style_radius(batt_shell, 4, 0);
-    lv_obj_set_style_pad_all(batt_shell, 2, 0);
+    lv_obj_set_style_radius(batt_shell, 3, 0);
+    lv_obj_set_style_pad_hor(batt_shell, 2, 0);
+    lv_obj_set_style_pad_ver(batt_shell, 2, 0);
     lv_obj_clear_flag(batt_shell, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *nub = lv_obj_create(parent);
-    lv_obj_set_size(nub, 2, 6);
-    lv_obj_align_to(nub, batt_shell, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
-    lv_obj_set_style_bg_color(nub, PACT_COL_TEXT_DIM, 0);
+    lv_obj_set_size(nub, 3, 6);
+    lv_obj_set_pos(nub, 577, y + 4);
+    lv_obj_set_style_bg_color(nub, PACT_COL_TEXT, 0);
     lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(nub, 0, 0);
     lv_obj_set_style_radius(nub, 1, 0);
 
     batt_fill = lv_obj_create(batt_shell);
-    lv_obj_set_size(batt_fill, lv_pct(100), lv_pct(100));
+    lv_obj_set_size(batt_fill, lv_pct(100), 8);
     lv_obj_align(batt_fill, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_bg_color(batt_fill, PACT_COL_WHITE, 0);
+    lv_obj_set_style_bg_color(batt_fill, PACT_COL_TEXT, 0);
     lv_obj_set_style_bg_opa(batt_fill, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(batt_fill, 0, 0);
     lv_obj_set_style_radius(batt_fill, 1, 0);
 
     ui_set_battery(batt_pct, batt_chg);
+}
+
+void ui_battery_create(lv_obj_t *parent)
+{
+    ui_battery_create_at(parent, 22);
 }
 
 void ui_set_battery(int percent, bool charging)
@@ -196,7 +208,7 @@ void ui_show_vol_toast(void)
     lv_obj_t *lbl = lv_label_create(vol_toast);
     if (v == 0) lv_label_set_text(lbl, "muted");
     else        lv_label_set_text_fmt(lbl, "volume %d", v);
-    lv_obj_set_style_text_font(lbl, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(lbl, &diatype_regular_15, 0);
     lv_obj_set_style_text_color(lbl, v == 0 ? PACT_COL_BATT_LOW : PACT_COL_TEXT, 0);
     lv_obj_center(lbl);
 
@@ -281,13 +293,12 @@ static void player_tick(lv_timer_t *t)
 
 static void menu_paint_selection(void)
 {
+    /* Figma 01: every row warm white; selection = #1a1a1a bg + Medium cut */
     for (int i = 0; i < MENU_COUNT; i++) {
         bool sel = (i == menu_sel);
         lv_obj_set_style_bg_opa(menu_rows[i], sel ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        lv_obj_set_style_text_color(menu_labels[i],
-                                    sel ? PACT_COL_TEXT : PACT_COL_TEXT_DIM, 0);
-        lv_obj_set_style_text_color(menu_chevrons[i],
-                                    sel ? PACT_COL_TEXT_DIM : PACT_COL_SELECT, 0);
+        lv_obj_set_style_text_font(menu_labels[i],
+                                   sel ? &diatype_medium_19 : &diatype_regular_19, 0);
     }
     lv_obj_scroll_to_view(menu_rows[menu_sel], LV_ANIM_ON);
 }
@@ -316,21 +327,20 @@ void ui_show_menu(void)
     ui_cur_screen = UI_SCR_MENU;
     lv_obj_t *scr = ui_screen_new();
 
-    /* header: small-caps section label + battery, hairline below */
+    /* header: centered "Music" Medium 18 + battery, 12% hairline below */
     lv_obj_t *hdr = lv_label_create(scr);
-    lv_label_set_text(hdr, "MUSIC");
-    lv_obj_set_style_text_font(hdr, &diatype_regular_16, 0);
-    lv_obj_set_style_text_color(hdr, PACT_COL_TEXT_DIM, 0);
-    lv_obj_set_style_text_letter_space(hdr, 3, 0);
-    lv_obj_set_pos(hdr, MENU_PAD_X + 6, 22);
+    lv_label_set_text(hdr, "Music");
+    lv_obj_set_style_text_font(hdr, &diatype_medium_18, 0);
+    lv_obj_set_style_text_color(hdr, PACT_COL_TEXT, 0);
+    lv_obj_align(hdr, LV_ALIGN_TOP_MID, 0, 18);
 
-    ui_battery_create(scr);
+    ui_battery_create_at(scr, 20);
 
     lv_obj_t *rule = lv_obj_create(scr);
     lv_obj_set_size(rule, 600, 1);
     lv_obj_set_pos(rule, 0, 52);
-    lv_obj_set_style_bg_color(rule, PACT_COL_SELECT, 0);
-    lv_obj_set_style_bg_opa(rule, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(rule, PACT_COL_TEXT, 0);
+    lv_obj_set_style_bg_opa(rule, PACT_OPA_RULE, 0);
     lv_obj_set_style_border_width(rule, 0, 0);
 
     /* left column: menu list */
@@ -351,18 +361,20 @@ void ui_show_menu(void)
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(row, 0, 0);
         lv_obj_set_style_radius(row, 0, 0);
-        lv_obj_set_style_pad_left(row, MENU_PAD_X, 0);
-        lv_obj_set_style_pad_right(row, 16, 0);
+        lv_obj_set_style_pad_left(row, 22, 0);
+        lv_obj_set_style_pad_right(row, 18, 0);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *lbl = lv_label_create(row);
         lv_label_set_text(lbl, menu_items[i]);
-        lv_obj_set_style_text_font(lbl, &diatype_regular_22, 0);
+        lv_obj_set_style_text_font(lbl, &diatype_regular_19, 0);
+        lv_obj_set_style_text_color(lbl, PACT_COL_TEXT, 0);
         lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
         lv_obj_t *chev = lv_label_create(row);
-        lv_label_set_text(chev, ">");
-        lv_obj_set_style_text_font(chev, &diatype_regular_16, 0);
+        lv_label_set_text(chev, "\xE2\x80\xBA");   /* U+203A */
+        lv_obj_set_style_text_font(chev, &diatype_regular_20, 0);
+        lv_obj_set_style_text_color(chev, PACT_COL_TEXT_DIM, 0);
         lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
 
         menu_rows[i] = row;
@@ -389,12 +401,12 @@ void ui_show_menu(void)
             lv_image_set_src(cov, art);
             lv_obj_set_size(cov, 190, 190);
             lv_obj_set_pos(cov, 365, 100);
-            lv_obj_set_style_radius(cov, 4, 0);
+            lv_obj_set_style_radius(cov, 5, 0);
             lv_obj_set_style_clip_corner(cov, true, 0);
         }
         lv_obj_t *t1 = lv_label_create(scr);
         lv_label_set_text(t1, pane_title ? pane_title : "");
-        lv_obj_set_style_text_font(t1, &diatype_regular_16, 0);
+        lv_obj_set_style_text_font(t1, &diatype_medium_16, 0);
         lv_obj_set_style_text_color(t1, PACT_COL_TEXT, 0);
         lv_label_set_long_mode(t1, LV_LABEL_LONG_DOT);
         lv_obj_set_size(t1, 210, 20);
@@ -402,10 +414,10 @@ void ui_show_menu(void)
 
         lv_obj_t *t2 = lv_label_create(scr);
         lv_label_set_text(t2, pane_sub ? pane_sub : "");
-        lv_obj_set_style_text_font(t2, &diatype_regular_16, 0);
+        lv_obj_set_style_text_font(t2, &diatype_light_13, 0);
         lv_obj_set_style_text_color(t2, PACT_COL_TEXT_DIM, 0);
         lv_label_set_long_mode(t2, LV_LABEL_LONG_DOT);
-        lv_obj_set_size(t2, 210, 20);
+        lv_obj_set_size(t2, 210, 18);
         lv_obj_set_pos(t2, 365, 330);
     }
 

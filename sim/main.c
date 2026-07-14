@@ -247,6 +247,34 @@ int main(int argc, char **argv)
 
     if (play_path) sim_play(play_path);
 
+    /* --stress2: same graph but through REAL SDL key events (the path a
+     * human uses; catches delete-during-event-dispatch bugs) */
+    if (jump_screen && strcmp(jump_screen, "stress2") == 0) {
+        SDL_Keycode script[] = {
+            SDLK_DOWN, SDLK_RETURN,               /* menu -> carousel */
+            SDLK_DOWN, SDLK_DOWN, SDLK_UP,
+            SDLK_RETURN,                          /* -> tracks */
+            SDLK_DOWN, SDLK_ESCAPE,               /* -> carousel */
+            SDLK_ESCAPE,                          /* -> menu */
+            SDLK_UP,
+        };
+        for (int round = 0; round < 20; round++) {
+            for (size_t k = 0; k < sizeof(script) / sizeof(script[0]); k++) {
+                SDL_Event e; memset(&e, 0, sizeof(e));
+                e.type = SDL_KEYDOWN;
+                e.key.keysym.sym = script[k];
+                SDL_PushEvent(&e);
+                for (int t = 0; t < 6; t++) { lv_timer_handler(); SDL_Delay(2); }
+                e.type = SDL_KEYUP;
+                SDL_PushEvent(&e);
+                for (int t = 0; t < 3; t++) { lv_timer_handler(); SDL_Delay(2); }
+            }
+            if ((round % 5) == 0) printf("stress2 round %d ok\n", round);
+        }
+        printf("stress2 complete\n");
+        return 0;
+    }
+
     /* --stress: hammer the navigation graph headlessly until it breaks */
     if (jump_screen && strcmp(jump_screen, "stress") == 0) {
         pact_event_t script[] = {

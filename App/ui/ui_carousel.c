@@ -24,6 +24,9 @@ static lv_draw_buf_t  **cover_bufs;   /* covers decoded to RAM: transforms
 static size_t           count;
 static int               sel;
 static lv_obj_t         *lbl_title, *lbl_artist, *lbl_counter;
+static lv_obj_t        **dots;
+static size_t            dots_n;
+#define MAX_DOTS 15
 
 /* Art provider hands back "A:<path>.jpg"; the pre-scaled BMP twin of that
  * file is what we can actually load into RAM for scale transforms. */
@@ -39,9 +42,9 @@ static lv_draw_buf_t *load_cover_ram(const char *art)
     return pact_thumb_load_bmp(bmp);
 }
 
-/* scale (LVGL 256 = 1.0) and opacity by distance from center */
+/* scale (LVGL 256 = 1.0) and opacity by distance (Figma: 55% / 30%) */
 static const int16_t scale_by_d[] = { 256, 202, 135, 135 };
-static const uint8_t opa_by_d[]   = { 255, 165,  80,   0 };
+static const uint8_t opa_by_d[]   = { 255, 140,  77,   0 };
 
 static int16_t slot_scale(int d) { d = abs(d); return scale_by_d[d > 3 ? 3 : d]; }
 static uint8_t slot_opa(int d)   { d = abs(d); return opa_by_d[d > 3 ? 3 : d]; }
@@ -104,13 +107,21 @@ static void carousel_layout(bool instant)
     lv_obj_move_foreground(lbl_title);
     lv_obj_move_foreground(lbl_artist);
     lv_obj_move_foreground(lbl_counter);
+    for (size_t i = 0; i < dots_n; i++) lv_obj_move_foreground(dots[i]);
     const album_t *al = &ui_lib->albums[sel];
     lv_label_set_text(lbl_title, al->album[0] ? al->album : "(unknown album)");
     lv_label_set_text(lbl_artist, al->artist[0] ? al->artist : "(unknown)");
-    lv_label_set_text_fmt(lbl_counter, "%d / %zu", sel + 1, count);
     lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 312);
-    lv_obj_align(lbl_artist, LV_ALIGN_TOP_MID, 0, 344);
-    lv_obj_align(lbl_counter, LV_ALIGN_TOP_MID, 0, 378);
+    lv_obj_align(lbl_artist, LV_ALIGN_TOP_MID, 0, 343);
+    if (dots_n) {
+        lv_label_set_text(lbl_counter, "");
+        for (size_t i = 0; i < dots_n; i++)
+            lv_obj_set_style_bg_opa(dots[i],
+                                    (int)i == sel ? LV_OPA_COVER : PACT_OPA_DOT, 0);
+    } else {
+        lv_label_set_text_fmt(lbl_counter, "%d / %zu", sel + 1, count);
+        lv_obj_align(lbl_counter, LV_ALIGN_TOP_MID, 0, 376);
+    }
 }
 
 void ui_carousel_event(pact_event_t evt)
@@ -168,26 +179,49 @@ void ui_show_carousel(void)
         lv_obj_set_size(cov, COVER_PX, COVER_PX);
         lv_obj_set_y(cov, RAIL_CY - COVER_PX / 2);
         if (cover_bufs[i]) {
+            /* pivot 119 (not center): reproduces Figma's stepped tops,
+             * where smaller neighbors sit slightly lower (y95/120/150) */
             lv_obj_set_style_transform_pivot_x(cov, COVER_PX / 2, 0);
-            lv_obj_set_style_transform_pivot_y(cov, COVER_PX / 2, 0);
+            lv_obj_set_style_transform_pivot_y(cov, 119, 0);
         }
-        lv_obj_set_style_radius(cov, 4, 0);
+        lv_obj_set_style_radius(cov, 5, 0);
         lv_obj_set_style_clip_corner(cov, true, 0);
         lv_obj_clear_flag(cov, LV_OBJ_FLAG_SCROLLABLE);
         covers[i] = cov;
     }
 
     lbl_title = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_title, &diatype_regular_24, 0);
+    lv_obj_set_style_text_font(lbl_title, &diatype_medium_22, 0);
     lv_obj_set_style_text_color(lbl_title, PACT_COL_TEXT, 0);
 
     lbl_artist = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_artist, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(lbl_artist, &diatype_regular_14, 0);
     lv_obj_set_style_text_color(lbl_artist, PACT_COL_TEXT_DIM, 0);
 
     lbl_counter = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_counter, &diatype_regular_16, 0);
+    lv_obj_set_style_text_font(lbl_counter, &diatype_regular_14, 0);
     lv_obj_set_style_text_color(lbl_counter, PACT_COL_TEXT_DIM, 0);
+
+    /* Figma dot indicator (6px squares, r1, 14px pitch) for small shelves;
+     * large libraries get the counter instead */
+    free(dots);
+    dots = NULL;
+    dots_n = 0;
+    if (count <= MAX_DOTS) {
+        dots_n = count;
+        dots = calloc(dots_n, sizeof(lv_obj_t *));
+        int32_t x0 = 300 - ((int32_t)dots_n * 14 - 8) / 2;
+        for (size_t i = 0; i < dots_n; i++) {
+            lv_obj_t *d = lv_obj_create(scr);
+            lv_obj_set_size(d, 6, 6);
+            lv_obj_set_pos(d, x0 + (int32_t)i * 14, 378);
+            lv_obj_set_style_bg_color(d, PACT_COL_TEXT, 0);
+            lv_obj_set_style_border_width(d, 0, 0);
+            lv_obj_set_style_radius(d, 1, 0);
+            lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
+            dots[i] = d;
+        }
+    }
 
     /* land on the playing album if there is one */
     if (ui_current_track != UI_NO_TRACK) {
