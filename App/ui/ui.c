@@ -9,7 +9,7 @@
 #include "ui_internal.h"
 #include "../audio/audio_engine.h"
 
-#define MENU_ROW_H   44
+#define MENU_ROW_H   43
 #define MENU_PAD_X   22
 #define MENU_COL_W   320
 
