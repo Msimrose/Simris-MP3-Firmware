@@ -18,6 +18,8 @@ ui_art_provider_t  ui_art_provider;
 void             (*ui_on_play)(const char *path);
 ui_screen_id_t     ui_cur_screen = UI_SCR_MENU;
 size_t             ui_current_track = UI_NO_TRACK;
+ui_screen_id_t     ui_tracks_back = UI_SCR_CAROUSEL;
+size_t             ui_tracks_back_artist;
 
 static lv_group_t *group;
 static lv_obj_t   *prev_scr;
@@ -29,6 +31,8 @@ static const char *menu_items[] = {
 #define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
 #define MENU_IDX_NOWPLAYING 0
 #define MENU_IDX_ALBUMS     1
+#define MENU_IDX_ARTISTS    2
+#define MENU_IDX_SONGS      3
 
 static lv_obj_t *menu_rows[MENU_COUNT];
 static lv_obj_t *menu_labels[MENU_COUNT];
@@ -237,6 +241,9 @@ void ui_handle_event(pact_event_t evt)
     case UI_SCR_CAROUSEL:   ui_carousel_event(evt);   break;
     case UI_SCR_TRACKS:     ui_tracks_event(evt);     break;
     case UI_SCR_NOWPLAYING: ui_nowplaying_event(evt); break;
+    case UI_SCR_ARTISTS:    ui_artists_event(evt);    break;
+    case UI_SCR_ARTIST:     ui_artist_event(evt);     break;
+    case UI_SCR_SONGS:      ui_songs_event(evt);      break;
     }
 }
 
@@ -312,10 +319,16 @@ void ui_menu_event(pact_event_t evt)
         if (menu_sel > 0) { menu_sel--; menu_paint_selection(); }
         break;
     case PACT_EVT_CENTER:
-        if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count)
+        if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count) {
+            ui_tracks_back = UI_SCR_CAROUSEL;
             ui_show_carousel();
-        else if (menu_sel == MENU_IDX_NOWPLAYING && ui_current_track != UI_NO_TRACK)
+        } else if (menu_sel == MENU_IDX_ARTISTS && ui_lib && ui_lib->artist_count) {
+            ui_show_artists();
+        } else if (menu_sel == MENU_IDX_SONGS && ui_lib && ui_lib->count) {
+            ui_show_songs();
+        } else if (menu_sel == MENU_IDX_NOWPLAYING && ui_current_track != UI_NO_TRACK) {
             ui_show_nowplaying();
+        }
         break;
     default: break;
     }

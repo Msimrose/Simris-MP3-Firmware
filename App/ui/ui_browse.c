@@ -170,7 +170,10 @@ void ui_tracks_event(pact_event_t evt)
         ui_show_nowplaying();
         break;
     case PACT_EVT_UP:
-        ui_show_carousel();
+        if (ui_tracks_back == UI_SCR_ARTIST)
+            ui_show_artist(ui_tracks_back_artist);
+        else
+            ui_show_carousel();
         break;
     default: break;
     }

@@ -10,6 +10,9 @@ typedef enum {
     UI_SCR_CAROUSEL,
     UI_SCR_TRACKS,
     UI_SCR_NOWPLAYING,
+    UI_SCR_ARTISTS,
+    UI_SCR_ARTIST,
+    UI_SCR_SONGS,
 } ui_screen_id_t;
 
 #define UI_NO_TRACK ((size_t)-1)
@@ -43,9 +46,19 @@ void ui_show_albums(void);
 void ui_show_carousel(void);
 void ui_show_tracks(size_t album_idx);
 void ui_show_nowplaying(void);
+void ui_show_artists(void);
+void ui_show_artist(size_t artist_idx);
+void ui_show_songs(void);
 void ui_albums_event(pact_event_t evt);
 void ui_carousel_event(pact_event_t evt);
 void ui_tracks_event(pact_event_t evt);
 void ui_menu_event(pact_event_t evt);
 void ui_nowplaying_event(pact_event_t evt);
+void ui_artists_event(pact_event_t evt);
+void ui_artist_event(pact_event_t evt);
+void ui_songs_event(pact_event_t evt);
+
+/* where the tracks screen's back button returns (set before ui_show_tracks) */
+extern ui_screen_id_t ui_tracks_back;
+extern size_t         ui_tracks_back_artist;
 void ui_nowplaying_refresh(void);             /* periodic + on track change */

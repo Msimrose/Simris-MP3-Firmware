@@ -136,6 +136,7 @@ void ui_carousel_event(pact_event_t evt)
         if (sel > 0) { sel--; carousel_layout(false); }
         break;
     case PACT_EVT_CENTER:
+        ui_tracks_back = UI_SCR_CAROUSEL;
         ui_show_tracks((size_t)sel);
         break;
     case PACT_EVT_UP:

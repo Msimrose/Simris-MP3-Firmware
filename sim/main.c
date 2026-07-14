@@ -239,6 +239,19 @@ int main(int argc, char **argv)
     lv_indev_set_group(kb, ui_group());
     lv_group_focus_next(ui_group());
 
+    if (jump_screen && strcmp(jump_screen, "artists") == 0 && lib.artist_count) {
+        ui_handle_event(PACT_EVT_WHEEL_CW);
+        ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu -> Artists */
+        ui_handle_event(PACT_EVT_CENTER);
+        jump_screen = NULL;
+    }
+    if (jump_screen && strcmp(jump_screen, "songs") == 0 && lib.count) {
+        ui_handle_event(PACT_EVT_WHEEL_CW);
+        ui_handle_event(PACT_EVT_WHEEL_CW);
+        ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu -> Songs */
+        ui_handle_event(PACT_EVT_CENTER);
+        jump_screen = NULL;
+    }
     if (jump_screen && lib.album_count) {
         ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu: Now Playing -> Albums */
         ui_handle_event(PACT_EVT_CENTER);     /* enter Albums */

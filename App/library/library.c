@@ -12,6 +12,71 @@
 #define INDEX_MAGIC   "PACTIDX\x01"
 #define MAX_DEPTH     12
 
+/* Derived views: artist aggregation + global song order. Pure metadata
+ * work: whatever the scanner found becomes the browse structure. */
+static int artist_cmp(const void *a, const void *b)
+{
+    return strcasecmp(((const artist_t *)a)->name, ((const artist_t *)b)->name);
+}
+
+static library_t *songs_sort_lib;
+static int song_cmp(const void *a, const void *b)
+{
+    const track_t *ta = &songs_sort_lib->tracks[*(const size_t *)a];
+    const track_t *tb = &songs_sort_lib->tracks[*(const size_t *)b];
+    int c = strcasecmp(ta->t.title, tb->t.title);
+    if (c) return c;
+    return strcasecmp(ta->t.artist, tb->t.artist);
+}
+
+static void build_views(library_t *lib)
+{
+    /* artists: group albums by artist name (case-insensitive) */
+    for (size_t i = 0; i < lib->artist_count; i++) {
+        free(lib->artists[i].albums);
+        free(lib->artists[i].tracks);
+    }
+    free(lib->artists);
+    lib->artists = NULL;
+    lib->artist_count = 0;
+
+    for (size_t a = 0; a < lib->album_count; a++) {
+        const album_t *al = &lib->albums[a];
+        artist_t *ar = NULL;
+        for (size_t i = 0; i < lib->artist_count; i++) {
+            if (strcasecmp(lib->artists[i].name, al->artist) == 0) {
+                ar = &lib->artists[i];
+                break;
+            }
+        }
+        if (!ar) {
+            lib->artists = realloc(lib->artists,
+                                   (lib->artist_count + 1) * sizeof(artist_t));
+            ar = &lib->artists[lib->artist_count++];
+            memset(ar, 0, sizeof(*ar));
+            ar->name = al->artist;
+        }
+        ar->albums = realloc(ar->albums, (ar->album_count + 1) * sizeof(size_t));
+        ar->albums[ar->album_count++] = a;
+        for (size_t t = al->first; t < al->first + al->count; t++) {
+            ar->tracks = realloc(ar->tracks,
+                                 (ar->track_count + 1) * sizeof(size_t));
+            ar->tracks[ar->track_count++] = t;
+        }
+    }
+    if (lib->artist_count)
+        qsort(lib->artists, lib->artist_count, sizeof(artist_t), artist_cmp);
+    /* re-point album indices after artist sort? not needed: albums[] holds
+     * album indices which are unaffected by sorting the artists array */
+
+    /* songs: every track, alphabetical by title */
+    free(lib->songs);
+    lib->songs = malloc(lib->count * sizeof(size_t));
+    for (size_t i = 0; i < lib->count; i++) lib->songs[i] = i;
+    songs_sort_lib = lib;
+    if (lib->count) qsort(lib->songs, lib->count, sizeof(size_t), song_cmp);
+}
+
 static void build_albums(library_t *lib)
 {
     free(lib->albums);
@@ -33,6 +98,7 @@ static void build_albums(library_t *lib)
             lib->albums[lib->album_count - 1].count++;
         }
     }
+    build_views(lib);
 }
 
 /* ------------------------------ scan ------------------------------------ */
@@ -242,6 +308,12 @@ void library_free(library_t *lib)
     }
     free(lib->tracks);
     free(lib->albums);
+    for (size_t i = 0; i < lib->artist_count; i++) {
+        free(lib->artists[i].albums);
+        free(lib->artists[i].tracks);
+    }
+    free(lib->artists);
+    free(lib->songs);
     memset(lib, 0, sizeof(*lib));
 }
 

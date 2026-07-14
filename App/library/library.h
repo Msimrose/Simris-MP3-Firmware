@@ -28,10 +28,21 @@ typedef struct {
 } album_t;
 
 typedef struct {
-    track_t *tracks;
-    size_t   count;
-    album_t *albums;
-    size_t   album_count;
+    const char *name;             /* points into a track's tags */
+    size_t     *albums;           /* indices into albums[] */
+    size_t      album_count;
+    size_t     *tracks;           /* indices into tracks[] */
+    size_t      track_count;
+} artist_t;
+
+typedef struct {
+    track_t  *tracks;
+    size_t    count;
+    album_t  *albums;
+    size_t    album_count;
+    artist_t *artists;            /* derived: grouped + alphabetized */
+    size_t    artist_count;
+    size_t   *songs;              /* derived: all tracks, title order */
 } library_t;
 
 bool library_scan(library_t *lib, const char *root);
