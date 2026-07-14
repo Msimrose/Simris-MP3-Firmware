@@ -20,6 +20,8 @@
 
 #include "pact_boot.h"
 #include "pact_display.h"
+#include "pact_input.h"
+#include "pact_power.h"
 #include "pact_mem.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_out.h"
@@ -108,7 +110,31 @@ static void ui_task_fn(void *arg)
     ui_set_library(&lib, NULL);         /* TODO: art provider = thumb cache */
     ui_set_on_play(device_play);
     ui_init();
+
+    bool display_on = true;
+    TickType_t next_batt = 0;
     for (;;) {
+        pact_event_t e;
+        while (pact_input_get(&e, 0)) {
+            if (e == PACT_EVT_POWER_LONG) {
+                pact_power_shutdown();               /* does not return */
+            } else if (e == PACT_EVT_POWER_SHORT) {
+                /* screen sleep/wake; playback keeps running dark */
+                display_on = !display_on;
+                if (display_on) pact_display_init();
+                else            pact_display_off();
+            } else {
+                ui_handle_event(e);
+            }
+        }
+
+        if (xTaskGetTickCount() >= next_batt) {
+            next_batt = xTaskGetTickCount() + pdMS_TO_TICKS(2000);
+            int pct = pact_battery_percent();
+            if (pct >= 0)
+                ui_set_battery(pct, pact_charging());
+        }
+
         lv_timer_handler();
         vTaskDelay(pdMS_TO_TICKS(5));
     }
@@ -148,11 +174,20 @@ void pact_boot_create_tasks(void)
     static const osThreadAttr_t ui_attr = {
         .name = "ui", .stack_size = 8192, .priority = osPriorityNormal,
     };
+    static const osThreadAttr_t input_attr = {
+        .name = "input", .stack_size = 3072, .priority = osPriorityAboveNormal,
+    };
+    static const osThreadAttr_t power_attr = {
+        .name = "power", .stack_size = 3072, .priority = osPriorityNormal,
+    };
     static const osThreadAttr_t storage_attr = {
         .name = "storage", .stack_size = 6144, .priority = osPriorityLow,
     };
+    pact_input_init();
     (void)osThreadNew(audio_task_fn, NULL, &audio_attr);
     (void)osThreadNew(ui_task_fn, NULL, &ui_attr);
+    (void)osThreadNew(pact_input_task, NULL, &input_attr);
+    (void)osThreadNew(pact_power_task, NULL, &power_attr);
     (void)osThreadNew(storage_task_fn, NULL, &storage_attr);
 }
 

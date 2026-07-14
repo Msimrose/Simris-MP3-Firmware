@@ -162,6 +162,28 @@ what remains. Written at the end of the first major build push (branches
   fixed vs the panel's 3.6 V typical (in the 2.0-6.0 V spec range, but
   watch first power-up).
 
+### Input/power HAL (compiles for device; feels real at hardware bring-up)
+- `App/hal/input_hal.c` + `pact_input.h`: input task polls at 100 Hz -
+  7 buttons (active-low, two-sample debounce = 20 ms worst case; volume
+  keys auto-repeat 400 ms/150 ms), power switch (release <2 s =
+  POWER_SHORT, hold 2 s = POWER_LONG once), AS5600 wheel (RAW_ANGLE reads
+  over I2C1 @0x36, wrap-aware deltas, 24 detents/rev -> WHEEL_CW/CCW;
+  I2C errors counted not fatal). Events land in a FreeRTOS queue as
+  `pact_event_t`; ui_task drains it into ui_handle_event. The CubeMX EXTI
+  lines stay armed for STOP-mode wake later; the event path is polled.
+  ⚠ Bring-up constants: PACT_WHEEL_INVERT (direction), PACT_WHEEL_DETENTS
+  (feel), PACT_PWR_SW_ACTIVE_HIGH (verify latch polarity on the board).
+- `App/hal/power_hal.c` + `pact_power.h`: power task at 1 Hz reads
+  BAT_SENSE (ADC1 ch3) - **the 1.5-cycle sampling-time preflight finding
+  is fixed here** (810.5 cycles + one-shot calibration at task start) -
+  median-of-5, resting LiPo LUT -> percent; CHG_STAT/PG_STAT (open-drain
+  active-low) -> charging/vbus getters; ui_task pushes percent+charging
+  into ui_set_battery every 2 s. POWER_SHORT toggles panel off/on
+  (playback keeps running dark); POWER_LONG -> pact_power_shutdown():
+  audio_out_stop -> unmount both volumes -> panel off -> PWR_HOLD low.
+  ⚠ PACT_BAT_DIV assumes a 2:1 divider - the divider is NOT yet wired on
+  the schematic (open preflight item); set the real ratio at reconcile.
+
 ### Device build
 - Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver
   + boot + display) compiles and links with the CubeMX core: **~1046 KB
@@ -186,10 +208,7 @@ what remains. Written at the end of the first major build push (branches
    note above); then the UI art provider hook in pact_boot.
 2. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
    owns volumes; DMA double-buffered bridge for ~24 MB/s.
-3. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named
-   events (the UI already consumes `pact_event_t` only), battery ADC
-   (sampling time fix needed: 1.5 cyc too short) + LiPo LUT, sleep/wake.
-4. **Audio polish**: gapless (engine APIs already expose exact lengths),
+3. **Audio polish**: gapless (engine APIs already expose exact lengths),
    UI sounds mixer (Micah's sound design, later).
 
 ### UI
