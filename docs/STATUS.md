@@ -96,11 +96,11 @@ what remains. Written at the end of the first major build push (branches
   from main() USER CODE RTOS_THREADS. Tasks (CMSIS-RTOS2, stacks from the
   64K RTOS heap in DTCM): audio (High; pump loop woken by the SAI wakeup
   hook via vTaskNotifyGiveFromISR + 10ms poll fallback), ui (Normal;
-  lv_init + tick, then idles on `pact_display_ready` until the display
-  driver lands - the volatile gate keeps the whole UI linked), storage
-  (Low; mounts both volumes; scan lands here). input/power/led tasks come
-  with the input/power HAL. `device_play()` = the UI on_play seam:
-  engine play -> audio_out_start(track rate).
+  lv_init + tick -> pact_display_init() -> library + ui_init +
+  lv_timer_handler loop), storage (Low; mounts both volumes; scan lands
+  here). input/power/led tasks come with the input/power HAL.
+  `device_play()` = the UI on_play seam: engine play ->
+  audio_out_start(track rate).
 - main() USER CODE 1: PWR_HOLD (PE15) latched high first thing via raw
   registers (before HAL_Init), and MPU region 1 = D2 SRAM1+SRAM2 256 KB
   non-cacheable (TEX=1 C=0 B=0), configured before the generated
@@ -113,11 +113,37 @@ what remains. Written at the end of the first major build push (branches
   from tasks only, never ISRs; DMA buffers stay explicit PACT_D2 statics.
 - PCM ring on device: 16384 frames (128 KB, .d2_bss) - matches the sim.
 
+### Display driver (compiles for device; lights up at hardware bring-up)
+- `App/hal/disp_rm690b0.c` + `App/hal/pact_display.h`. Init = the OFFICIAL
+  Startek spec 6.3 MCU code verbatim (0xFE 0x20 / 0x26 0x0A / 0x24 0x80 /
+  page 0 / CASET 16-col offset / RASET / TE on / 0x51 0xFF / 0x30+0x12
+  partial / sleep-out +120ms / 0x29) with exactly two additions: COLMOD
+  0x3A=0x55 (RGB565; official code leaves 24-bit default) and MADCTL for
+  the landscape mount. Power-off / idle / HBM codes from the same section
+  (off implemented; idle/HBM TODO trivial).
+- QSPI transport: cmd = 0x02 + (cmd<<8) 24-bit addr, 1 lane; pixels =
+  0x32 + 0x002C00, 4 lanes, one CS burst per flush. MX_QUADSPI_Init is a
+  CubeMX placeholder (prescaler 255!) - the driver re-inits at runtime:
+  40 MHz to start (prescaler 5; try 3 = 60 MHz later), FlashSize 23.
+- LVGL: 600x450 landscape display, 2x 600x48 RGB565 partial buffers
+  (57.6 KB each, AXI), RENDER_MODE_PARTIAL, blocking polled flush
+  (~2.9 ms/band @40 MHz) with lv_draw_sw_rgb565_swap (panel is
+  big-endian). MDMA + TE-synced flush = the planned perf step.
+- Rails: PMIC_EN -> 10ms -> PMIC_CTRL -> 10ms -> DISP_RST high -> 50ms ->
+  init. ⚠ BRING-UP UNKNOWNS (one-constant fixes, flagged in the source):
+  MADCTL 0x60 vs 0xA0 (which way is up) and which axis carries the +16
+  offset (LCD_X_OFF/LCD_Y_OFF). Bench note: TPS65632 ELVDD is 4.6 V
+  fixed vs the panel's 3.6 V typical (in the 2.0-6.0 V spec range, but
+  watch first power-up).
+
 ### Device build
 - Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver
-  + boot) compiles and links with the CubeMX core: **~935 KB flash (45%),
-  DTCM 83K/128K (64K RTOS heap + app bss), AXI 256K/512K (64K LVGL pool +
-  192K malloc arena), D2 144K/288K (16K SAI DMA + 128K PCM ring)**.
+  + boot + display) compiles and links with the CubeMX core: **~1046 KB
+  flash (51%), DTCM 83K/128K (64K RTOS heap + app bss), AXI 368K/512K
+  (64K LVGL pool + 192K malloc arena + 115K display buffers), D2
+  144K/288K (16K SAI DMA + 128K PCM ring)**. Flash grew ~136K at display
+  registration: the RGB565 render paths only link once a real display
+  exists, so the budget is honest now.
 - Linker: `.axi_bss` / `.d2_bss` sections added to STM32H743XX_FLASH.ld
   (a CubeMX regen may rewrite the .ld: re-add if so). `App/pact_mem.h`
   has the placement macros. A regen also rewrites main.c USER CODE
@@ -129,27 +155,16 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **Display driver** - RM690B0 over QUADSPI. ⚠ Use the OFFICIAL Startek
-   init from `~/Downloads/KD024EGOIN152-01 SPEC V0.pdf` section 6.3
-   ("Power on Initial Code For MCU"), NOT the LilyGO port (LilyGO was only
-   ever a reference for the same RM690B0 controller IC; the panel spec
-   supersedes it). Key facts from the spec: driver IC = RM690B0; init =
-   0xFE 0x20 / 0x26 0x0A / 0x24 0x80 / 0xFE 0x00 / CASET 0x2A
-   0x0010..0x01D1 (**note the 16-column offset**) / RASET 0x2B
-   0x0000..0x0257 / TE on 0x35 / brightness 0x51 0xFF / 0x30+0x12 partial /
-   sleep-out 0x11 + 120ms / display-on 0x29. Power-off, Idle (0x39/0x38)
-   and HBM (0x66) sequences also in section 6.3. Panel native 450x600
-   portrait; UI renders 600x450 landscape (rotate via MADCTL or in blit).
-2. **Library scan over FatFs** - port scan_dir to f_opendir/f_readdir
+1. **Library scan over FatFs** - port scan_dir to f_opendir/f_readdir
    (parsers already portable); on-device thumb cache generation
    (HW JPEG decode -> pre-scaled raw thumbs; must transcode progressive
    sources, see baseline note above).
-3. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
+2. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
    owns volumes; DMA double-buffered bridge for ~24 MB/s.
-4. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named
+3. **Input/power HAL**: buttons EXTI debounce, AS5600 wheel poll -> named
    events (the UI already consumes `pact_event_t` only), battery ADC
    (sampling time fix needed: 1.5 cyc too short) + LiPo LUT, sleep/wake.
-5. **Audio polish**: gapless (engine APIs already expose exact lengths),
+4. **Audio polish**: gapless (engine APIs already expose exact lengths),
    UI sounds mixer (Micah's sound design, later).
 
 ### UI

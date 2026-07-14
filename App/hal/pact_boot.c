@@ -19,6 +19,7 @@
 #ifndef PACT_SIM
 
 #include "pact_boot.h"
+#include "pact_display.h"
 #include "pact_mem.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_out.h"
@@ -39,11 +40,6 @@ PACT_D2 static int32_t ring_storage[PACT_RING_FRAMES * 2];
 static pcm_ring_t ring;
 
 static TaskHandle_t audio_task_handle;
-
-/* Set by the RM690B0 display driver (backend #2) once the LVGL display is
- * registered; until then the UI task idles. volatile keeps the full UI
- * call graph in the link so the flash budget stays honest. */
-volatile bool pact_display_ready = false;
 
 /* ---- audio task ---------------------------------------------------------- */
 
@@ -93,10 +89,13 @@ static void ui_task_fn(void *arg)
     lv_init();
     lv_tick_set_cb(HAL_GetTick);
 
-    /* TODO(backend #2): register the RM690B0 QSPI display + flush callback
-     * here, then set pact_display_ready. Nothing to render into until then. */
-    while (!pact_display_ready)
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    /* Panel rails + official Startek init + LVGL display registration.
+     * QSPI writes are blind (no readback), so failure here means the QSPI
+     * peripheral itself; park rather than render into nothing. */
+    if (!pact_display_init()) {
+        for (;;)
+            vTaskDelay(portMAX_DELAY);
+    }
 
     static library_t lib;
     library_load(&lib, "1:/pact.idx");  /* storage_task owns scanning later */
