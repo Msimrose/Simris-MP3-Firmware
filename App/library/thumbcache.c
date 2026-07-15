@@ -169,13 +169,12 @@ static bool build_one(const track_t *tr, const char *out_path, int px)
     void *pool = malloc(8192);                       /* TJPGD workspace */
     JDEC jd;
     if (pool && jd_prepare(&jd, jpg_in, pool, 8192, &d) == JDR_OK) {
-        /* largest prescale that still covers the target (upscale if the
-         * source is smaller than the thumb: mapping handles it) */
-        uint8_t scale = 0;
-        while (scale < 3 && (jd.width >> (scale + 1)) >= (unsigned)px &&
-               (jd.height >> (scale + 1)) >= (unsigned)px)
-            scale++;
-        int sw = jd.width >> scale, sh = jd.height >> scale;
+        /* Full-resolution decode, downscale in the sampling maps. LVGL's
+         * vendored tjpgdcnf.h has JD_USE_SCALE=0 and lvgl is a pristine
+         * submodule we do not patch; the 1/2^n prescale would only save
+         * scan-time CPU (one-time per album). If first-boot thumb builds
+         * measure too slow on the H7, that is the knob to revisit. */
+        int sw = jd.width, sh = jd.height;
         int side = sw < sh ? sw : sh;         /* centered square crop */
         int ox = (sw - side) / 2, oy = (sh - side) / 2;
 
@@ -189,7 +188,7 @@ static bool build_one(const track_t *tr, const char *out_path, int px)
                 d.map_x[i] = (uint16_t)(ox + m);
                 d.map_y[i] = (uint16_t)(oy + m);
             }
-            if (jd_decomp(&jd, jpg_out, scale) == JDR_OK)
+            if (jd_decomp(&jd, jpg_out, 0) == JDR_OK)
                 ok = write_bmp(out_path, d.img, px);
         }
         free(d.img);

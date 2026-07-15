@@ -206,10 +206,13 @@ what remains. Written at the end of the first major build push (branches
   Minecraft album is exactly this) and PNG folder art (TODO lodepng).
   Nearest-neighbor is bring-up quality; box filter or DMA2D bilinear is
   the Phase-8 upgrade - bump PACT_THUMB_VERSION to force a rebuild.
-- Vendored-tree changes to remember: LVGL `tjpgdcnf.h` JD_USE_SCALE 0->1
-  (an LVGL update would revert it; jd_decomp(scale=0) callers unaffected)
-  and the lv_conf.h flags above. malloc arena grew 192K->256K for the
-  232px RGB888 target (162K) alongside the library index.
+- lvgl stays a PRISTINE submodule (an in-submodule tjpgdcnf.h edit was
+  reverted 2026-07-15 - it was invisible to clones and would have broken
+  fresh checkouts). Decode therefore runs at full resolution and the
+  sampling maps downscale; costs scan-time CPU only (one-time per album).
+  If first-boot builds measure slow on the H7, JD_USE_SCALE prescale is
+  the knob - but it requires forking/patching lvgl, so measure first.
+  malloc arena grew 192K->256K for the 232px RGB888 target (162K).
 - **VERIFIED in fatfs_test**: 32 BMPs for 8 baseline-JPEG albums (1
   progressive correctly skipped - the test walks JPEG markers, SOF0/1 vs
   SOF2, to know what to expect), per-size dimension + header + non-flat
