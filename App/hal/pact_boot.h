@@ -6,5 +6,9 @@
  * osKernelInitialize() and before osKernelStart().
  */
 #pragma once
+#include <stdbool.h>
 
 void pact_boot_create_tasks(void);
+
+/* True once storage_task has published the scanned library. */
+bool pact_boot_library_ready(void);

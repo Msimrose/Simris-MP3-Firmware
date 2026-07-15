@@ -22,6 +22,7 @@
 #include "pact_display.h"
 #include "pact_input.h"
 #include "pact_power.h"
+#include "pact_usb.h"
 #include "pact_mem.h"
 #include "audio/audio_engine.h"
 #include "audio/audio_out.h"
@@ -50,6 +51,8 @@ static TaskHandle_t audio_task_handle;
  * once lib_ready flips. */
 static library_t lib;
 static volatile bool lib_ready;
+
+bool pact_boot_library_ready(void) { return lib_ready; }
 
 #define PACT_ART_DIR "1:/.pactart"
 
@@ -204,12 +207,16 @@ void pact_boot_create_tasks(void)
     static const osThreadAttr_t storage_attr = {
         .name = "storage", .stack_size = 6144, .priority = osPriorityLow,
     };
+    static const osThreadAttr_t usb_attr = {
+        .name = "usb", .stack_size = 4096, .priority = osPriorityNormal,
+    };
     pact_input_init();
     (void)osThreadNew(audio_task_fn, NULL, &audio_attr);
     (void)osThreadNew(ui_task_fn, NULL, &ui_attr);
     (void)osThreadNew(pact_input_task, NULL, &input_attr);
     (void)osThreadNew(pact_power_task, NULL, &power_attr);
     (void)osThreadNew(storage_task_fn, NULL, &storage_attr);
+    (void)osThreadNew(pact_usb_task, NULL, &usb_attr);
 }
 
 #endif /* !PACT_SIM */

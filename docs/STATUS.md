@@ -217,10 +217,35 @@ what remains. Written at the end of the first major build push (branches
   (hdiutil attach) and eyeballed: correct colors (no BGR swap), correct
   orientation, centered crop, Mk.gee cover clearly recognizable.
 
+### USB MSC (compiles for device; enumerates at hardware bring-up)
+- Stack = **TinyUSB 0.21.0** (vendored subset in `lib/tinyusb/`: device
+  core + MSC class + Synopsys DWC2 portable; MIT license - no commercial
+  restriction, unlike ST's classic library SLA). Chosen for first-class
+  H7 + ULPI HS support and because MSC bridges directly onto our FatFs
+  diskio block layer.
+- `App/hal/usb_msc.c` + `pact_usb.h` + `App/tusb_config.h`: two raw LUNs
+  (LUN0 = eMMC pdrv1, LUN1 = microSD pdrv0), read10/write10 ->
+  disk_read/disk_write, capacity from GET_SECTOR_COUNT, no-card = SCSI
+  "medium not present". Slave/FIFO mode for bring-up (~10-15 MB/s);
+  DWC2 internal DMA + D2 buffers is the later ~24 MB/s step.
+- Session FSM in usb_task: VBUS (PG_STAT) attach -> stop playback
+  pop-free -> unmount both volumes -> soft-connect. Detach -> soft
+  disconnect -> **reboot** (iPod-style post-sync restart: rescan + thumb
+  top-up + fresh UI; live rescan is later polish). The task waits for the
+  first-boot library before offering disks; a thumb build interrupted by
+  attach fails clean (pact_open errors) and resumes after the reboot.
+- Plumbing: OTG_HS IRQ spliced to TinyUSB in stm32h7xx_it.c USER CODE
+  (HAL_PCD_IRQHandler skipped; MX PCD init still provides ULPI pinmux +
+  clocks before dcd_init soft-resets the core). pdTICKS_TO_MS shim in
+  tusb_config.h (CubeMX FreeRTOS predates it). TinyUSB .bss in DTCM
+  (72% now) - fine while the CPU does the copying.
+- ⚠ VID/PID = TinyUSB test values (0xCafe/0x4001): register real IDs
+  (pid.codes) before any unit ships. Serial = MCU UID.
+
 ### Device build
 - Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver
-  + boot + display) compiles and links with the CubeMX core: **~1042 KB
-  flash (51%), DTCM 84K/128K (64K RTOS heap + app bss), AXI 433K/512K
+  + boot + display) compiles and links with the CubeMX core: **~1064 KB
+  flash (52%), DTCM 93K/128K (64K RTOS heap + app bss + TinyUSB), AXI 433K/512K
   (64K LVGL pool + 256K malloc arena + 115K display buffers), D2
   144K/288K (16K SAI DMA + 128K PCM ring)**.
 - Linker: `.axi_bss` / `.d2_bss` sections added to STM32H743XX_FLASH.ld
@@ -234,9 +259,7 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **USB MSC** (Phase 7): TinyUSB or ST stack; unmount FatFs while host
-   owns volumes; DMA double-buffered bridge for ~24 MB/s.
-2. **Audio polish**: gapless (engine APIs already expose exact lengths),
+1. **Audio polish**: gapless (engine APIs already expose exact lengths),
    UI sounds mixer (Micah's sound design, later).
 
 ### UI
