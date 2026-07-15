@@ -28,7 +28,7 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "ff.h"
+#include "storage/storage.h"
 
 #define PACT_BAT_DIV_NUM 2u   /* vbat = vadc * NUM / DEN  (TODO: schematic) */
 #define PACT_BAT_DIV_DEN 1u
@@ -115,8 +115,7 @@ static uint32_t median5(uint32_t *v)
 void pact_power_shutdown(void)
 {
     audio_out_stop();                       /* amp off, mute, rails down */
-    f_unmount("0:");
-    f_unmount("1:");
+    storage_unmount_all();
     pact_display_off();
     HAL_GPIO_WritePin(PWR_HOLD_GPIO_Port, PWR_HOLD_Pin, GPIO_PIN_RESET);
     /* Latch drops the rail here. On a bench supply (latch not wired yet)

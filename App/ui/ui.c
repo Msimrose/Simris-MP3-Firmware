@@ -258,6 +258,22 @@ size_t ui_album_of_track(size_t track_idx)
     return (size_t)-1;
 }
 
+static uint32_t ui_seen_serial;   /* engine serial we last synced with */
+
+/* Queue the following album track for a gapless takeover (same-rate
+ * tracks hand over inside the engine, sample-exact; rate changes fall
+ * back to the FINISHED advance below). */
+static void queue_next_in_album(void)
+{
+    const char *next = NULL;
+    size_t alb = ui_album_of_track(ui_current_track);
+    if (alb != (size_t)-1 &&
+        ui_current_track + 1 <
+            ui_lib->albums[alb].first + ui_lib->albums[alb].count)
+        next = ui_lib->tracks[ui_current_track + 1].path;
+    audio_engine_set_next(next);
+}
+
 void ui_play_track(size_t track_idx)
 {
     if (!ui_lib || track_idx >= ui_lib->count) return;
@@ -269,14 +285,28 @@ void ui_play_track(size_t track_idx)
 
     ui_current_track = track_idx;
     if (ui_on_play) ui_on_play(ui_lib->tracks[track_idx].path);
+    ui_seen_serial = audio_engine_track_serial();
+    queue_next_in_album();
     if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();
 }
 
-/* Half-second player tick: live progress + auto-advance through the album. */
+/* Half-second player tick: live progress + album auto-advance. Gapless
+ * takeovers show up as a serial bump (the decoder crossed the boundary;
+ * audio lags by up to a ring-depth - accepted early title flip).
+ * FINISHED still happens at album end and on rate-family changes. */
 static void player_tick(lv_timer_t *t)
 {
     (void)t;
     static int finish_grace;
+
+    if (ui_current_track != UI_NO_TRACK &&
+        audio_engine_track_serial() != ui_seen_serial) {
+        ui_seen_serial = audio_engine_track_serial();
+        ui_current_track++;             /* engine only swaps to our next */
+        queue_next_in_album();
+        if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();
+    }
+
     if (audio_engine_state() == ENGINE_FINISHED &&
         ui_current_track != UI_NO_TRACK) {
         if (++finish_grace >= 2) {

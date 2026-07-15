@@ -14,7 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../App/audio/audio_source.h"
+#include "../App/audio/audio_engine.h"
+#include "../App/audio/pcm_ring.h"
 #include "../App/audio/volume.h"
+#include <stdbool.h>
 
 #define CHUNK 4096
 
@@ -58,15 +61,57 @@ static int compare(const char *pa, const char *pb)
     return 1;
 }
 
+/* Play a, gapless-handoff to b, capture EVERYTHING that crosses the ring.
+ * Bit-equal to the concatenation of both tracks' full decodes proves the
+ * boundary is sample-exact: nothing dropped, nothing inserted, no gap. */
+static int gapless(const char *a, const char *b, const char *out_path)
+{
+    enum { RING_FRAMES = 16384 };
+    static int32_t storage[RING_FRAMES * 2];
+    static int32_t sink[4096 * 2];
+    static pcm_ring_t ring;
+
+    pcm_ring_init(&ring, storage, RING_FRAMES);
+    audio_engine_init(&ring);
+    if (!audio_engine_play(a)) { fprintf(stderr, "cannot open %s\n", a); return 1; }
+    audio_engine_set_next(b);
+
+    FILE *out = fopen(out_path, "wb");
+    if (!out) { fprintf(stderr, "cannot write %s\n", out_path); return 1; }
+
+    uint64_t total = 0;
+    uint32_t serial0 = audio_engine_track_serial();
+    for (;;) {
+        bool worked = audio_engine_pump();
+        size_t got = pcm_ring_read(&ring, sink, 4096);
+        if (got) {
+            fwrite(sink, sizeof(int32_t) * 2, got, out);
+            total += got;
+        }
+        if (!worked && !got && audio_engine_state() == ENGINE_FINISHED)
+            break;
+    }
+    fclose(out);
+    bool handed_over = audio_engine_track_serial() != serial0;
+    audio_engine_stop();
+    fprintf(stderr, "gapless: %llu frames, handoff %s\n",
+            (unsigned long long)total, handed_over ? "OK" : "DID NOT HAPPEN");
+    return handed_over ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     if (argc >= 4 && strcmp(argv[1], "--compare") == 0)
         return compare(argv[2], argv[3]);
 
+    if (argc >= 5 && strcmp(argv[1], "--gapless") == 0)
+        return gapless(argv[2], argv[3], argv[4]);
+
     if (argc < 3) {
         fprintf(stderr, "usage: %s <in> <out.raw> [--vol N] [--seek S]\n"
-                        "       %s --compare <a.raw> <b.raw>\n",
-                argv[0], argv[0]);
+                        "       %s --compare <a.raw> <b.raw>\n"
+                        "       %s --gapless <a> <b> <out.raw>\n",
+                argv[0], argv[0], argv[0]);
         return 2;
     }
 

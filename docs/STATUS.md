@@ -20,6 +20,18 @@ what remains. Written at the end of the first major build push (branches
 - **Verified vs ffmpeg** (decode_test tool): FLAC 16/44.1 and 24/96 and WAV
   BIT-PERFECT; seek sample-exact; MP3 320/V0 = 128 dB SNR with exact gapless
   length match; volume -20 dB measures 0.100000.
+- **GAPLESS (2026-07-15, verified)**: audio_engine_set_next() queues the
+  follow-up; when the current source exhausts, same-rate tracks take over
+  the ring WITHOUT a clear - sample-exact boundary. Rate-family changes
+  fall back to ENGINE_FINISHED (output clock must switch). track_serial()
+  bumps on every source change so the UI observes takeovers by polling -
+  no cross-thread callbacks. UI queues the next album track on play and
+  re-queues on each takeover (ui.c player_tick; title flips up to a
+  ring-depth early, accepted). **Proof: decode_test --gapless captures
+  everything crossing the ring and compares against the concatenation of
+  both tracks' independent decodes - BIT-PERFECT for a FLAC pair AND an
+  MP3 320 pair (LAME delay/padding trim confirmed: both decode to exactly
+  132300 frames).**
 
 ### Library (`App/library/`) - fully automatic from file tags
 - Custom parsers (no tag-lib bloat): FLAC STREAMINFO/Vorbis/PICTURE block
@@ -67,7 +79,10 @@ what remains. Written at the end of the first major build push (branches
 ### Storage stack (host-VERIFIED on a disk image; SDMMC silicon at bring-up)
 - `App/pact_io.h` seam: host backend = stdio, device = FatFs. All decoders,
   tag parsers, index IO go through it (regression suite re-verified after
-  the swap).
+  the swap). 2026-07-15 layering pass: pact_mkdir() joined the seam
+  (thumbcache no longer touches ff.h from the portable library layer) and
+  storage_unmount_all() centralizes the USB/shutdown volume handover
+  (was duplicated in two hal files).
 - FatFs upgraded **R0.15b -> R0.16 + official patches p1+p2** (2026-07-14).
   Why: R0.15b shipped a real regression - f_readdir repeats the LAST entry
   forever at end-of-directory (upstream R0.16 changelog: "Fixed f_readdir
@@ -262,8 +277,9 @@ what remains. Written at the end of the first major build push (branches
 ## 2. What REMAINS
 
 ### Backend (writable now, testable on hardware)
-1. **Audio polish**: gapless (engine APIs already expose exact lengths),
-   UI sounds mixer (Micah's sound design, later).
+1. **UI sounds** (the last backend item): boot chime, wheel tick, click,
+   confirm blips - a small mixer over/instead of the music stream in the
+   SAI path. Blocked on Micah's sound design; plumbing is Fable-side.
 
 ### UI
 - Variant B (different composition: 01c big-type menu, NP-C poster etc.)

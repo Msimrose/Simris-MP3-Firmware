@@ -14,4 +14,10 @@ storage_status_t storage_mount_all(void)
     return st;
 }
 
+void storage_unmount_all(void)
+{
+    f_unmount("0:");
+    f_unmount("1:");
+}
+
 #endif /* !PACT_SIM */

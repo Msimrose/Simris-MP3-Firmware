@@ -3,6 +3,8 @@
 
 #include "pact_io.h"
 #include <stdio.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include <stdlib.h>
 
 struct pact_file {
@@ -58,6 +60,11 @@ uint64_t pact_tell(pact_file_t *f)
 uint64_t pact_size(pact_file_t *f)
 {
     return f->size;
+}
+
+bool pact_mkdir(const char *path)
+{
+    return mkdir(path, 0755) == 0 || errno == EEXIST;
 }
 
 #endif /* PACT_SIM */

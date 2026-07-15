@@ -4,10 +4,10 @@
  *
  * Pipeline per album+size: open the art source through pact_io (embedded
  * art = a byte window inside the track file; folder art = the whole file),
- * TJPGD-decode with the largest 1/2^n prescale that still covers the
- * target, center-crop square, nearest-neighbor map into a full RGB888
- * target buffer on the heap (232px worst case = 162K; the AXI arena is
- * sized for it), and stream out a classic bottom-up 24-bit BMP.
+ * TJPGD-decode at full resolution, center-crop square, nearest-neighbor
+ * map into a full RGB888 target buffer on the heap (232px worst case =
+ * 162K; the AXI arena is sized for it), and write a classic bottom-up
+ * 24-bit BMP.
  *
  * Nearest sampling is bring-up quality; if it reads as aliased on the
  * panel, the upgrade path is box-filtering here or DMA2D bilinear at
@@ -17,7 +17,6 @@
 
 #include "thumbcache.h"
 #include "../pact_io.h"
-#include "ff.h"                       /* f_mkdir - !PACT_SIM is always FatFs */
 #include "src/libs/tjpgd/tjpgd.h"     /* via the lib/lvgl include root */
 
 #include <stdio.h>
@@ -204,7 +203,7 @@ static bool build_one(const track_t *tr, const char *out_path, int px)
 
 size_t thumbcache_build(const library_t *lib, const char *dir)
 {
-    f_mkdir(dir);                    /* FR_EXIST is fine */
+    if (!pact_mkdir(dir)) return 0;
 
     size_t built = 0;
     for (size_t a = 0; a < lib->album_count; a++) {

@@ -10,3 +10,7 @@ typedef struct {
 } storage_status_t;
 
 storage_status_t storage_mount_all(void);
+
+/* Release both volumes (USB handover, shutdown). FatFs calls fail cleanly
+ * afterwards; remount = storage_mount_all(). */
+void storage_unmount_all(void);

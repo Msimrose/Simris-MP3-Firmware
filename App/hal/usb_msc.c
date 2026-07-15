@@ -29,6 +29,7 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "storage/storage.h"
 #include "ff.h"
 #include "diskio.h"
 #include "tusb.h"
@@ -261,8 +262,7 @@ void pact_usb_task(void *arg)
         if (vbus && !session) {
             audio_engine_stop();
             audio_out_stop();       /* pop-free amp/DAC down */
-            f_unmount("0:");
-            f_unmount("1:");
+            storage_unmount_all();
             usb_owns_disks = true;
             tud_connect();
             session = true;

@@ -13,6 +13,7 @@ typedef struct pact_file pact_file_t;
 pact_file_t *pact_open(const char *path);        /* read-only */
 pact_file_t *pact_open_write(const char *path);  /* create/truncate */
 void         pact_close(pact_file_t *f);
+bool         pact_mkdir(const char *path);       /* true if created/exists */
 
 size_t   pact_read(pact_file_t *f, void *buf, size_t n);   /* bytes read */
 size_t   pact_write(pact_file_t *f, const void *buf, size_t n);

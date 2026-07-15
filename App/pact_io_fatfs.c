@@ -67,4 +67,10 @@ uint64_t pact_size(pact_file_t *f)
     return (uint64_t)f_size(&f->fil);
 }
 
+bool pact_mkdir(const char *path)
+{
+    FRESULT fr = f_mkdir(path);
+    return fr == FR_OK || fr == FR_EXIST;
+}
+
 #endif /* !PACT_SIM */
