@@ -13,13 +13,13 @@
 #include "../settings/pact_settings.h"
 #include "../audio/audio_engine.h"
 
-#define ROW_Y0     68
-#define ROW_PITCH  42
+#define ROW_Y0     64
+#define ROW_PITCH  40   /* Figma is 42; tightened for 10 rows */
 #define ROW_LX     38
 #define ROW_RX     562
 #define SEG_N      12
 
-typedef enum { ROW_GAPLESS, ROW_STATIC, ROW_BRIGHT, ROW_VIEW, ROW_ABOUT } row_kind_t;
+typedef enum { ROW_GAPLESS, ROW_STATIC, ROW_BRIGHT, ROW_VIEW, ROW_NPVIEW, ROW_ABOUT } row_kind_t;
 
 static const struct { const char *label; row_kind_t kind; const char *fixed; }
 rows[] = {
@@ -31,6 +31,7 @@ rows[] = {
     { "Sleep Timer",      ROW_STATIC,  "Off" },
     { "Theme",            ROW_STATIC,  "Dark" },
     { "Albums View",      ROW_VIEW,    NULL },
+    { "Now Playing",      ROW_NPVIEW,  NULL },
     { "About",            ROW_ABOUT,   "›" },
 };
 #define ROW_COUNT ((int)(sizeof rows / sizeof rows[0]))
@@ -46,6 +47,7 @@ static const char *value_text(int i)
     switch (rows[i].kind) {
     case ROW_GAPLESS: return pact_settings.gapless ? "On" : "Off";
     case ROW_VIEW:    return pact_settings.albums_view ? "Grid" : "Carousel";
+    case ROW_NPVIEW:  return pact_settings.np_view ? "Immersive" : "Centered";
     default:          return rows[i].fixed;
     }
 }
@@ -55,7 +57,8 @@ static void paint_row_values(void)
     for (int i = 0; i < ROW_COUNT; i++) {
         if (!value_lbl[i]) continue;
         lv_label_set_text(value_lbl[i], value_text(i));
-        bool live = rows[i].kind == ROW_GAPLESS || rows[i].kind == ROW_VIEW;
+        bool live = rows[i].kind == ROW_GAPLESS || rows[i].kind == ROW_VIEW ||
+                    rows[i].kind == ROW_NPVIEW;
         lv_obj_set_style_text_color(value_lbl[i],
             live ? PACT_COL_TEXT : PACT_COL_TEXT_DIM, 0);
         lv_obj_align(value_lbl[i], LV_ALIGN_TOP_RIGHT,
@@ -126,7 +129,7 @@ void ui_show_settings(void)
         if (i < ROW_COUNT - 1) {
             lv_obj_t *rule = lv_obj_create(scr);
             lv_obj_set_size(rule, 524, 1);
-            lv_obj_set_pos(rule, ROW_LX, y + 30);
+            lv_obj_set_pos(rule, ROW_LX, y + 29);
             lv_obj_set_style_bg_color(rule, PACT_COL_TEXT, 0);
             lv_obj_set_style_bg_opa(rule, PACT_OPA_RULE, 0);
             lv_obj_set_style_border_width(rule, 0, 0);
@@ -177,6 +180,10 @@ void ui_settings_event(pact_event_t evt)
             paint_row_values();
         } else if (rows[sel].kind == ROW_VIEW) {
             pact_settings.albums_view ^= 1;
+            pact_settings_save();
+            paint_row_values();
+        } else if (rows[sel].kind == ROW_NPVIEW) {
+            pact_settings.np_view ^= 1;
             pact_settings_save();
             paint_row_values();
         } else if (rows[sel].kind == ROW_BRIGHT) {

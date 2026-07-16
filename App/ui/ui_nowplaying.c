@@ -1,10 +1,17 @@
 /*
- * Pact MP-1 - Now Playing, NP-A "Centered", exact to Figma node 10:2.
- * One deliberate addition over the mock: the format badge (FLAC · 24/48)
- * centered between the time stamps, per the agreed variant-A brief.
+ * Pact MP-1 - Now Playing.
+ *   NP-A "Centered"  (Figma 10:2)  - default; format badge is the one
+ *                                    agreed addition over the mock.
+ *   NP-B "Immersive" (Figma 17:66) - full-bleed cover (232 thumb RAM-
+ *                                    scaled ~2.6x), bottom scrim gradient,
+ *                                    title/artist bottom-left, full-width
+ *                                    hairline progress, no times/badge.
+ * Chosen in Settings -> Now Playing (pact_settings.np_view).
  */
 #include "ui_internal.h"
+#include "thumb.h"
 #include "../audio/audio_engine.h"
+#include "../settings/pact_settings.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -15,6 +22,11 @@
 
 static lv_obj_t *np_title, *np_artist, *np_badge, *np_state;
 static lv_obj_t *np_bar_fill, *np_elapsed, *np_total;
+static int32_t   np_bar_w = BAR_W;      /* variant-dependent */
+
+/* immersive backdrop RAM buffers: free one build late so the previous
+ * screen's async delete never renders a dead buffer */
+static lv_draw_buf_t *np_bg_cur, *np_bg_old;
 
 static void fmt_time(char *out, size_t cap, uint32_t ms)
 {
@@ -45,15 +57,19 @@ void ui_nowplaying_refresh(void)
         pos_ms = tr->t.duration_ms;
 
     char buf[16];
-    fmt_time(buf, sizeof(buf), pos_ms);
-    lv_label_set_text(np_elapsed, buf);
-    fmt_time(buf, sizeof(buf), tr->t.duration_ms);
-    lv_label_set_text(np_total, buf);
-    lv_obj_update_layout(np_total);
-    lv_obj_set_x(np_total, BAR_X + BAR_W - lv_obj_get_width(np_total));
+    if (np_elapsed) {
+        fmt_time(buf, sizeof(buf), pos_ms);
+        lv_label_set_text(np_elapsed, buf);
+    }
+    if (np_total) {
+        fmt_time(buf, sizeof(buf), tr->t.duration_ms);
+        lv_label_set_text(np_total, buf);
+        lv_obj_update_layout(np_total);
+        lv_obj_set_x(np_total, BAR_X + BAR_W - lv_obj_get_width(np_total));
+    }
 
     int32_t w = tr->t.duration_ms
-                    ? (int32_t)((uint64_t)pos_ms * BAR_W / tr->t.duration_ms)
+                    ? (int32_t)((uint64_t)pos_ms * np_bar_w / tr->t.duration_ms)
                     : 0;
     lv_obj_set_width(np_bar_fill, w > 3 ? w : 3);
 
@@ -69,6 +85,115 @@ void ui_show_nowplaying(void)
     size_t alb = ui_album_of_track(ui_current_track);
 
     lv_obj_t *scr = ui_screen_new();
+
+    if (pact_settings.np_view) {        /* ---- NP-B Immersive ---- */
+        np_bar_w = 524;
+        np_elapsed = np_total = np_badge = NULL;
+
+        if (np_bg_old) { lv_draw_buf_destroy(np_bg_old); np_bg_old = NULL; }
+        np_bg_old = np_bg_cur;
+        np_bg_cur = NULL;
+
+        const char *art = (ui_art_provider && alb != (size_t)-1)
+                              ? ui_art_provider(alb, 232) : NULL;
+        if (art) {
+            /* BMP twin -> RAM (same trick as the carousel: file-sourced
+             * JPEGs cannot scale-transform in LVGL 9.4) */
+            const char *path = (art[0] && art[1] == ':') ? art + 2 : art;
+            char bmp[512];
+            size_t n = strlen(path);
+            if (n > 4 && n < sizeof bmp) {
+                memcpy(bmp, path, n + 1);
+                memcpy(bmp + n - 4, ".bmp", 4);
+                np_bg_cur = pact_thumb_load_bmp(bmp);
+            }
+        }
+        if (np_bg_cur) {
+            lv_obj_t *bg = lv_image_create(scr);
+            lv_image_set_src(bg, np_bg_cur);
+            lv_image_set_pivot(bg, 0, 0);
+            lv_image_set_scale(bg, 600 * 256 / 232);   /* fill width */
+            lv_obj_set_pos(bg, 0, -75);                /* center 600px crop */
+        }
+
+        /* scrim: gentle overall dark + bottom gradient for text */
+        lv_obj_t *dark = lv_obj_create(scr);
+        lv_obj_set_size(dark, 600, 450);
+        lv_obj_set_pos(dark, 0, 0);
+        lv_obj_set_style_bg_color(dark, PACT_COL_GROUND, 0);
+        lv_obj_set_style_bg_opa(dark, 64, 0);
+        lv_obj_set_style_border_width(dark, 0, 0);
+        lv_obj_set_style_radius(dark, 0, 0);
+
+        static lv_grad_dsc_t grad;                     /* style keeps the ptr */
+        grad.dir = LV_GRAD_DIR_VER;
+        grad.stops_count = 2;
+        grad.stops[0].color = lv_color_black();
+        grad.stops[0].opa   = LV_OPA_0;
+        grad.stops[0].frac  = 0;
+        grad.stops[1].color = lv_color_black();
+        grad.stops[1].opa   = 220;
+        grad.stops[1].frac  = 255;
+        lv_obj_t *scrim = lv_obj_create(scr);
+        lv_obj_set_size(scrim, 600, 190);
+        lv_obj_set_pos(scrim, 0, 260);
+        lv_obj_set_style_bg_grad(scrim, &grad, 0);
+        lv_obj_set_style_bg_opa(scrim, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(scrim, 0, 0);
+        lv_obj_set_style_radius(scrim, 0, 0);
+
+        ui_battery_create_at(scr, 22);
+
+        np_title = lv_label_create(scr);
+        lv_label_set_text(np_title, tr->t.title);
+        lv_obj_set_style_text_font(np_title, &diatype_medium_27, 0);
+        lv_obj_set_style_text_color(np_title, PACT_COL_TEXT, 0);
+        lv_label_set_long_mode(np_title, LV_LABEL_LONG_DOT);
+        lv_obj_set_width(np_title, 524);
+        lv_obj_set_pos(np_title, 38, 316);
+
+        np_artist = lv_label_create(scr);
+        lv_label_set_text(np_artist, tr->t.artist);
+        lv_obj_set_style_text_font(np_artist, &diatype_regular_15, 0);
+        lv_obj_set_style_text_color(np_artist, PACT_COL_TEXT_DIM, 0);
+        lv_label_set_long_mode(np_artist, LV_LABEL_LONG_DOT);
+        lv_obj_set_width(np_artist, 400);
+        lv_obj_set_pos(np_artist, 38, 356);
+
+        np_state = lv_label_create(scr);
+        lv_obj_set_style_text_font(np_state, &diatype_regular_11, 0);
+        lv_obj_set_style_text_color(np_state, PACT_COL_TEXT_DIM, 0);
+        lv_label_set_text(np_state, "");
+        lv_obj_set_pos(np_state, 38, 388);
+
+        lv_obj_t *btrack = lv_obj_create(scr);
+        lv_obj_set_size(btrack, np_bar_w, 2);
+        lv_obj_set_pos(btrack, 38, 412);
+        lv_obj_set_style_bg_color(btrack, PACT_COL_TEXT, 0);
+        lv_obj_set_style_bg_opa(btrack, PACT_OPA_TRACK, 0);
+        lv_obj_set_style_border_width(btrack, 0, 0);
+        lv_obj_set_style_radius(btrack, 1, 0);
+
+        np_bar_fill = lv_obj_create(scr);
+        lv_obj_set_size(np_bar_fill, 3, 2);
+        lv_obj_set_pos(np_bar_fill, 38, 412);
+        lv_obj_set_style_bg_color(np_bar_fill, PACT_COL_TEXT, 0);
+        lv_obj_set_style_bg_opa(np_bar_fill, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(np_bar_fill, 0, 0);
+        lv_obj_set_style_radius(np_bar_fill, 1, 0);
+
+        lv_obj_t *sink2 = lv_obj_create(scr);
+        lv_obj_set_size(sink2, 1, 1);
+        lv_obj_set_style_bg_opa(sink2, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(sink2, 0, 0);
+
+        ui_nowplaying_refresh();
+        ui_bind_keys(sink2);
+        ui_screen_show(scr);
+        return;
+    }
+
+    np_bar_w = BAR_W;                   /* ---- NP-A Centered ---- */
 
     /* brand wordmark (Figma 9:2 placement) + battery */
     lv_obj_t *logo = lv_image_create(scr);

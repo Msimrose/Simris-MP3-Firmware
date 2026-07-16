@@ -14,6 +14,7 @@ typedef struct {
     uint8_t brightness;   /* 0..11 - the Figma 12-segment bar */
     uint8_t albums_view;  /* 0 = carousel (08), 1 = grid (04) */
     uint8_t gapless;      /* 0/1 - engine set_next handoff on/off */
+    uint8_t np_view;      /* 0 = NP-A centered, 1 = NP-B immersive */
 } pact_settings_t;
 
 extern pact_settings_t pact_settings;

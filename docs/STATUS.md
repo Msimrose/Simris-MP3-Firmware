@@ -260,7 +260,7 @@ what remains. Written at the end of the first major build push (branches
 - ⚠ VID/PID = TinyUSB test values (0xCafe/0x4001): register real IDs
   (pid.codes) before any unit ships. Serial = MCU UID.
 
-### Settings + Albums grid (sim-verified 2026-07-15)
+### Settings + Albums grid + Immersive NP (sim-verified 2026-07-15)
 - `App/settings/pact_settings.c/h` (portable): {brightness 0..11,
   albums_view carousel/grid, gapless on/off} persisted via pact_io -
   device "1:/pact.cfg" (loaded in storage_task before lib_ready), sim
@@ -272,6 +272,13 @@ what remains. Written at the end of the first major build push (branches
   queue when switched off), Brightness (center = edit mode, wheel adjusts
   + applies live, saves on exit), Albums View. Crossfade/EQ/Volume
   Limit/Sleep Timer/Theme/About render per Figma but inert (dim values).
+- "Now Playing" settings row (Centered/Immersive): NP-B (Figma 17:66)
+  implemented in ui_nowplaying.c - full-bleed cover (232 BMP twin RAM-
+  scaled 2.6x, freed one build late for the async screen delete), bottom
+  scrim gradient (static lv_grad_dsc_t - the style keeps the pointer),
+  title/artist bottom-left, full-width hairline progress, no times/badge.
+  NP-E rejected (segment motif, dead). Settings pitch 42->40 for 10 rows.
+  Grid selection = opacity falloff (no outline), per Micah vs Figma.
 - `App/ui/ui_grid.c` = Figma 04 (13:2): 4x2 pages of 116px tiles,
   wheel walks albums row-major, hairline border = selection, name+artist
   bottom-left, center opens tracks (back returns to grid). Menu "Albums"

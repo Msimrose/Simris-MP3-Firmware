@@ -4,12 +4,13 @@
 #include <string.h>
 
 #define MAGIC   "PSET"
-#define VERSION 1
+#define VERSION 2
 
 pact_settings_t pact_settings = {
     .brightness  = 9,     /* bright-ish default, matches Figma mock */
     .albums_view = 0,     /* carousel */
     .gapless     = 1,
+    .np_view     = 0,     /* centered */
 };
 
 static char settings_path[128];
@@ -28,6 +29,7 @@ void pact_settings_init(const char *path)
         if (s.brightness > 11) s.brightness = 11;
         s.albums_view = s.albums_view ? 1 : 0;
         s.gapless     = s.gapless ? 1 : 0;
+        s.np_view     = s.np_view ? 1 : 0;
         pact_settings = s;
     }
     pact_close(f);

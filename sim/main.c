@@ -252,6 +252,10 @@ int main(int argc, char **argv)
         ui_handle_event(PACT_EVT_CENTER);
         jump_screen = NULL;
     }
+    if (jump_screen && strcmp(jump_screen, "immersive") == 0) {
+        pact_settings.np_view = 1;
+        jump_screen = "nowplaying";
+    }
     if (jump_screen && strcmp(jump_screen, "settings") == 0) {
         for (int i = 0; i < 5; i++) ui_handle_event(PACT_EVT_WHEEL_CW);
         ui_handle_event(PACT_EVT_CENTER);     /* menu -> Settings */
