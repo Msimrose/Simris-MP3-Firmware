@@ -29,6 +29,7 @@
 #include "audio/pcm_ring.h"
 #include "library/library.h"
 #include "library/thumbcache.h"
+#include "settings/pact_settings.h"
 #include "storage/storage.h"
 #include "ui/ui.h"
 
@@ -128,6 +129,8 @@ static void ui_task_fn(void *arg)
     while (!lib_ready)                  /* storage_task is scanning */
         vTaskDelay(pdMS_TO_TICKS(50));
 
+    pact_settings_set_brightness_cb(pact_display_set_brightness);
+    pact_settings_apply_brightness();
     ui_set_library(&lib, device_art);
     ui_set_on_play(device_play);
     ui_init();
@@ -174,6 +177,7 @@ static void storage_task_fn(void *arg)
      * UI waiting (bring-up bench state - debug over SWD/UART). */
     const char *root = st.emmc_mounted ? "1:" : (st.sd_mounted ? "0:" : NULL);
     if (root) {
+        pact_settings_init("1:/pact.cfg");
         library_scan(&lib, root);
         if (st.emmc_mounted)
             library_save(&lib, "1:/pact.idx");  /* fast-boot cache, later */

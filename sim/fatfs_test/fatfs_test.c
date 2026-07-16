@@ -32,7 +32,7 @@
 #include "pact_io.h"
 #include "host_walk.h"
 
-#define IMG_SECTORS 2097152u   /* x512 = 1 GiB, sparse */
+#define IMG_SECTORS 8388608u   /* x512 = 4 GiB, sparse */
 #define SS 512u
 
 /* ---- diskio over a file-backed image (pdrv 0 only) ----------------------- */

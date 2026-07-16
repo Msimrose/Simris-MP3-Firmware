@@ -172,6 +172,8 @@ void ui_tracks_event(pact_event_t evt)
     case PACT_EVT_UP:
         if (ui_tracks_back == UI_SCR_ARTIST)
             ui_show_artist(ui_tracks_back_artist);
+        else if (ui_tracks_back == UI_SCR_GRID)
+            ui_show_grid();
         else
             ui_show_carousel();
         break;

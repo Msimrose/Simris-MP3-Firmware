@@ -260,6 +260,32 @@ what remains. Written at the end of the first major build push (branches
 - ⚠ VID/PID = TinyUSB test values (0xCafe/0x4001): register real IDs
   (pid.codes) before any unit ships. Serial = MCU UID.
 
+### Settings + Albums grid (sim-verified 2026-07-15)
+- `App/settings/pact_settings.c/h` (portable): {brightness 0..11,
+  albums_view carousel/grid, gapless on/off} persisted via pact_io -
+  device "1:/pact.cfg" (loaded in storage_task before lib_ready), sim
+  ~/.pact_sim_settings. Brightness applier seam: device = RM690B0 DCS
+  0x51 (registered in ui_task), sim = none. 12-step bar maps to 40..255
+  (never fully off).
+- `App/ui/ui_settings.c` = Figma 07 (16:53) + one added row "Albums
+  View" (Micah 2026-07-15). Live rows: Gapless toggle (clears the engine
+  queue when switched off), Brightness (center = edit mode, wheel adjusts
+  + applies live, saves on exit), Albums View. Crossfade/EQ/Volume
+  Limit/Sleep Timer/Theme/About render per Figma but inert (dim values).
+- `App/ui/ui_grid.c` = Figma 04 (13:2): 4x2 pages of 116px tiles,
+  wheel walks albums row-major, hairline border = selection, name+artist
+  bottom-left, center opens tracks (back returns to grid). Menu "Albums"
+  routes by the setting. 116 added to pact_thumb_sizes (now 5 sizes).
+  ⚠ LVGL gotcha: disable scrolling + scrollbars on tile containers or
+  they draw as white hairlines.
+- REAL FINDING from fatfs_test: ':' is an ILLEGAL character on
+  FAT/exFAT - an album folder named "SMILE! :D" cannot exist on device
+  storage (macOS accepts it; the tags carry the true album name, so the
+  UI still shows the colon). The desktop sync tool must sanitize folder
+  names. Test image grown 1 GiB -> 4 GiB sparse (gallery is 1.4 GB now).
+  Shots verified vs Figma; stress2 + fatfs_test (50 thumbs / 10 albums)
+  + device build pass.
+
 ### Device build
 - Whole app (LVGL + fonts + UI + decoders + library + FatFs + SAI driver
   + boot + display) compiles and links with the CubeMX core: **~1064 KB

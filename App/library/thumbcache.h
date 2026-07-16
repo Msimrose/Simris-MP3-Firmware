@@ -25,7 +25,7 @@
 
 /* Every size the UI requests: browse/artist rows, album header, carousel +
  * menu pane, now-playing. Keep in sync with the ui_art_provider callers. */
-#define PACT_THUMB_SIZE_COUNT 4
+#define PACT_THUMB_SIZE_COUNT 5
 extern const int pact_thumb_sizes[PACT_THUMB_SIZE_COUNT];
 
 /* Build all missing thumbs; returns the number of BMP files written.

@@ -25,7 +25,7 @@
 
 #define PACT_THUMB_VERSION 1          /* bump to force a cache rebuild */
 
-const int pact_thumb_sizes[PACT_THUMB_SIZE_COUNT] = { 56, 180, 190, 232 };
+const int pact_thumb_sizes[PACT_THUMB_SIZE_COUNT] = { 56, 116, 180, 190, 232 };
 
 /* djb2, same keying as the sim art cache */
 static uint32_t path_hash(const char *s)

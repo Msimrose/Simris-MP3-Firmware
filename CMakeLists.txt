@@ -49,6 +49,7 @@ file(GLOB APP_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/App/audio/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/hal/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/library/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/settings/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/storage/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ui/assets/*.c)

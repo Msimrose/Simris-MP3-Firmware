@@ -26,6 +26,7 @@
 #include "../App/audio/audio_engine.h"
 #include "../App/audio/pcm_ring.h"
 #include "../App/library/library.h"
+#include "../App/settings/pact_settings.h"
 
 /* ---- audio output: SDL stands in for the SAI DMA ring consumer ---------- */
 
@@ -233,6 +234,12 @@ int main(int argc, char **argv)
     printf("library: %zu tracks, %zu albums from %s\n", lib.count,
            lib.album_count, lib_dir);
 
+    {
+        static char spath[512];
+        snprintf(spath, sizeof spath, "%s/.pact_sim_settings",
+                 getenv("HOME") ? getenv("HOME") : "/tmp");
+        pact_settings_init(spath);
+    }
     ui_set_library(&lib, sim_album_art);
     ui_set_on_play(sim_play);
     ui_init();
@@ -242,6 +249,17 @@ int main(int argc, char **argv)
     if (jump_screen && strcmp(jump_screen, "artists") == 0 && lib.artist_count) {
         ui_handle_event(PACT_EVT_WHEEL_CW);
         ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu -> Artists */
+        ui_handle_event(PACT_EVT_CENTER);
+        jump_screen = NULL;
+    }
+    if (jump_screen && strcmp(jump_screen, "settings") == 0) {
+        for (int i = 0; i < 5; i++) ui_handle_event(PACT_EVT_WHEEL_CW);
+        ui_handle_event(PACT_EVT_CENTER);     /* menu -> Settings */
+        jump_screen = NULL;
+    }
+    if (jump_screen && strcmp(jump_screen, "grid") == 0 && lib.album_count) {
+        pact_settings.albums_view = 1;        /* force grid for the shot */
+        ui_handle_event(PACT_EVT_WHEEL_CW);   /* menu -> Albums */
         ui_handle_event(PACT_EVT_CENTER);
         jump_screen = NULL;
     }

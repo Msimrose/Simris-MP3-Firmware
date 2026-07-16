@@ -7,6 +7,7 @@
  * element allowed color (red under 15%).
  */
 #include "ui_internal.h"
+#include "../settings/pact_settings.h"
 #include "../audio/audio_engine.h"
 
 #define MENU_ROW_H   43
@@ -33,6 +34,7 @@ static const char *menu_items[] = {
 #define MENU_IDX_ALBUMS     1
 #define MENU_IDX_ARTISTS    2
 #define MENU_IDX_SONGS      3
+#define MENU_IDX_SETTINGS   5
 
 static lv_obj_t *menu_rows[MENU_COUNT];
 static lv_obj_t *menu_labels[MENU_COUNT];
@@ -244,6 +246,8 @@ void ui_handle_event(pact_event_t evt)
     case UI_SCR_ARTISTS:    ui_artists_event(evt);    break;
     case UI_SCR_ARTIST:     ui_artist_event(evt);     break;
     case UI_SCR_SONGS:      ui_songs_event(evt);      break;
+    case UI_SCR_SETTINGS:   ui_settings_event(evt);   break;
+    case UI_SCR_GRID:       ui_grid_event(evt);       break;
     }
 }
 
@@ -266,6 +270,7 @@ static uint32_t ui_seen_serial;   /* engine serial we last synced with */
 static void queue_next_in_album(void)
 {
     const char *next = NULL;
+    if (!pact_settings.gapless) { audio_engine_set_next(NULL); return; }
     size_t alb = ui_album_of_track(ui_current_track);
     if (alb != (size_t)-1 &&
         ui_current_track + 1 <
@@ -350,8 +355,14 @@ void ui_menu_event(pact_event_t evt)
         break;
     case PACT_EVT_CENTER:
         if (menu_sel == MENU_IDX_ALBUMS && ui_lib && ui_lib->album_count) {
-            ui_tracks_back = UI_SCR_CAROUSEL;
-            ui_show_carousel();
+            if (pact_settings.albums_view) {
+                ui_show_grid();
+            } else {
+                ui_tracks_back = UI_SCR_CAROUSEL;
+                ui_show_carousel();
+            }
+        } else if (menu_sel == MENU_IDX_SETTINGS) {
+            ui_show_settings();
         } else if (menu_sel == MENU_IDX_ARTISTS && ui_lib && ui_lib->artist_count) {
             ui_show_artists();
         } else if (menu_sel == MENU_IDX_SONGS && ui_lib && ui_lib->count) {
