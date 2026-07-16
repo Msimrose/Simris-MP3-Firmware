@@ -145,8 +145,13 @@ static void ui_task_fn(void *arg)
             } else if (e == PACT_EVT_POWER_SHORT) {
                 /* screen sleep/wake; playback keeps running dark */
                 display_on = !display_on;
-                if (display_on) pact_display_init();
-                else            pact_display_off();
+                if (display_on) {
+                    /* panel init ends at 0x51 0xFF: restore the user's level */
+                    pact_display_init();
+                    pact_settings_apply_brightness();
+                } else {
+                    pact_display_off();
+                }
             } else {
                 ui_handle_event(e);
             }

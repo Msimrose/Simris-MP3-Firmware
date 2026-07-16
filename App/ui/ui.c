@@ -279,6 +279,11 @@ static void queue_next_in_album(void)
     audio_engine_set_next(next);
 }
 
+void ui_requeue_next(void)
+{
+    if (ui_current_track != UI_NO_TRACK) queue_next_in_album();
+}
+
 void ui_play_track(size_t track_idx)
 {
     if (!ui_lib || track_idx >= ui_lib->count) return;

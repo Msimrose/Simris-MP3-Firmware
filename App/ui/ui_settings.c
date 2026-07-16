@@ -176,6 +176,7 @@ void ui_settings_event(pact_event_t evt)
         if (rows[sel].kind == ROW_GAPLESS) {
             pact_settings.gapless ^= 1;
             if (!pact_settings.gapless) audio_engine_set_next(NULL);
+            else ui_requeue_next();       /* mid-track re-enable works too */
             pact_settings_save();
             paint_row_values();
         } else if (rows[sel].kind == ROW_VIEW) {

@@ -28,6 +28,7 @@ extern size_t             ui_current_track;   /* UI_NO_TRACK if none */
 size_t ui_album_of_track(size_t track_idx);
 void   ui_play_track(size_t track_idx);       /* rate-limited play */
 void   ui_volume_step(int dir);               /* +-1 step, shows toast */
+void   ui_requeue_next(void);                 /* re-sync engine gapless queue */
 
 /* Route all keys to obj (single-focus model: one receiver per screen). */
 void ui_bind_keys(lv_obj_t *obj);
