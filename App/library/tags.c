@@ -45,16 +45,34 @@ static bool wav_probe(const char *path, track_tags_t *t)
     return true;
 }
 
+/* Untagged files (WAVs mostly - field recordings, bounces): title from
+ * the filename stem, album from the parent folder so a folder of WAVs
+ * browses like an album. */
 static void filename_fallback(const char *path, track_tags_t *t)
 {
-    if (t->title[0]) return;
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
-    const char *dot = strrchr(base, '.');
-    size_t n = dot ? (size_t)(dot - base) : strlen(base);
-    if (n >= TAG_STR_MAX) n = TAG_STR_MAX - 1;
-    memcpy(t->title, base, n);
-    t->title[n] = '\0';
+
+    if (!t->title[0]) {
+        const char *dot = strrchr(base, '.');
+        size_t n = dot ? (size_t)(dot - base) : strlen(base);
+        if (n >= TAG_STR_MAX) n = TAG_STR_MAX - 1;
+        memcpy(t->title, base, n);
+        t->title[n] = '\0';
+    }
+
+    if (!t->album[0] && base > path) {
+        const char *dir_end = base - 1;              /* the '/' */
+        const char *dir = dir_end;
+        while (dir > path && dir[-1] != '/') dir--;
+        size_t n = (size_t)(dir_end - dir);
+        /* skip volume roots like "1:" */
+        if (n && !(n == 2 && dir[1] == ':')) {
+            if (n >= TAG_STR_MAX) n = TAG_STR_MAX - 1;
+            memcpy(t->album, dir, n);
+            t->album[n] = '\0';
+        }
+    }
 }
 
 bool tags_read(const char *path, track_tags_t *t)
