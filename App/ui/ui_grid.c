@@ -2,8 +2,9 @@
  * Albums grid - Figma 04 "Library (grid)" (node 13:2): 4x2 pages of 116px
  * covers on a 136px pitch from (38,70), selected album named bottom-left
  * (name + dim artist). An alternative to the carousel, chosen in
- * Settings -> Albums View. Selection = hairline border on the tile;
- * wheel walks albums row-major and pages at the edges.
+ * Settings -> Albums View. Selection = the selected tile at full
+ * opacity, all others dimmed (Figma treatment, like the carousel's
+ * neighbor falloff); wheel walks albums row-major and pages at the edges.
  */
 #include "ui_internal.h"
 #include "thumb.h"
@@ -51,8 +52,9 @@ static void paint_tiles(void)
         }
     }
     for (int i = 0; i < PER_PAGE; i++)
-        lv_obj_set_style_border_opa(tiles[i],
-            (size_t)(grid_page * PER_PAGE + i) == grid_sel ? 160 : 0, 0);
+        lv_obj_set_style_opa(tiles[i],
+            (size_t)(grid_page * PER_PAGE + i) == grid_sel
+                ? LV_OPA_COVER : PACT_OPA_NEAR, 0);
     paint_label();
 }
 
@@ -79,9 +81,7 @@ void ui_show_grid(void)
         lv_obj_set_style_bg_opa(t, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(t, 4, 0);
         lv_obj_set_style_clip_corner(t, true, 0);
-        lv_obj_set_style_border_width(t, 2, 0);
-        lv_obj_set_style_border_color(t, PACT_COL_TEXT, 0);
-        lv_obj_set_style_border_opa(t, 0, 0);
+        lv_obj_set_style_border_width(t, 0, 0);
         lv_obj_set_style_pad_all(t, 0, 0);
         lv_obj_remove_flag(t, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scrollbar_mode(t, LV_SCROLLBAR_MODE_OFF);
