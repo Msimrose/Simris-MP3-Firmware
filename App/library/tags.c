@@ -56,9 +56,42 @@ static void filename_fallback(const char *path, track_tags_t *t)
     if (!t->title[0]) {
         const char *dot = strrchr(base, '.');
         size_t n = dot ? (size_t)(dot - base) : strlen(base);
-        if (n >= TAG_STR_MAX) n = TAG_STR_MAX - 1;
-        memcpy(t->title, base, n);
-        t->title[n] = '\0';
+
+        /* rip convention "NN. Artist - Title": number -> track_no,
+         * left of " - " -> artist, right -> title */
+        size_t i = 0;
+        unsigned no = 0;
+        while (i < n && base[i] >= '0' && base[i] <= '9')
+            no = no * 10 + (unsigned)(base[i++] - '0');
+        if (i > 0 && i < n && (base[i] == '.' || base[i] == '-' ||
+                               base[i] == '_' || base[i] == ' ')) {
+            while (i < n && (base[i] == '.' || base[i] == '-' ||
+                             base[i] == '_' || base[i] == ' '))
+                i++;
+            if (!t->track_no && no) t->track_no = (uint16_t)no;
+        } else {
+            i = 0;                        /* no leading number */
+        }
+
+        const char *rest = base + i;
+        size_t rn = n - i;
+        const char *sep = NULL;
+        for (size_t k = 0; k + 3 <= rn; k++)
+            if (rest[k] == ' ' && rest[k + 1] == '-' && rest[k + 2] == ' ') {
+                sep = rest + k;
+                break;
+            }
+        if (sep && !t->artist[0] && sep > rest) {
+            size_t an = (size_t)(sep - rest);
+            if (an >= TAG_STR_MAX) an = TAG_STR_MAX - 1;
+            memcpy(t->artist, rest, an);
+            t->artist[an] = '\0';
+            rest = sep + 3;
+            rn = n - i - an - 3;
+        }
+        if (rn >= TAG_STR_MAX) rn = TAG_STR_MAX - 1;
+        memcpy(t->title, rest, rn);
+        t->title[rn] = '\0';
     }
 
     if (!t->album[0] && base > path) {

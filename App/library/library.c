@@ -131,10 +131,11 @@ static void push_track(library_t *lib, const char *path, const char *folder_art)
 
 static int track_cmp(const void *a, const void *b)
 {
+    /* album, then TRACK NUMBER: comparing artist before track number
+     * played multi-artist albums (compilations, feature-heavy releases)
+     * in artist-alphabetical order instead of track order */
     const track_t *ta = a, *tb = b;
     int c = strcasecmp(ta->t.album, tb->t.album);
-    if (c) return c;
-    c = strcasecmp(ta->t.artist, tb->t.artist);
     if (c) return c;
     if (ta->t.track_no != tb->t.track_no)
         return ta->t.track_no < tb->t.track_no ? -1 : 1;
