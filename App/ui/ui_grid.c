@@ -100,6 +100,14 @@ void ui_show_grid(void)
     lv_obj_set_style_text_color(artist_lbl, PACT_COL_TEXT_DIM, 0);
     lv_obj_set_pos(artist_lbl, 38, 370);
 
+
+    /* invisible key sink: routes wheel/buttons to this screen's handler */
+    lv_obj_t *sink = lv_obj_create(grid_scr);
+    lv_obj_set_size(sink, 1, 1);
+    lv_obj_set_style_bg_opa(sink, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sink, 0, 0);
+    ui_bind_keys(sink);
+
     paint_tiles();
     ui_screen_show(grid_scr);
 }

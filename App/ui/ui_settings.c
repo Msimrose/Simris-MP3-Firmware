@@ -133,6 +133,14 @@ void ui_show_settings(void)
         }
     }
 
+
+    /* invisible key sink: routes wheel/buttons to this screen's handler */
+    lv_obj_t *sink = lv_obj_create(scr);
+    lv_obj_set_size(sink, 1, 1);
+    lv_obj_set_style_bg_opa(sink, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sink, 0, 0);
+    ui_bind_keys(sink);
+
     paint_row_values();
     paint_selection();
     ui_screen_show(scr);
