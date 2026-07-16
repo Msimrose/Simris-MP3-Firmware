@@ -87,9 +87,9 @@ static int want_file(const char *name)
     if (!strcasecmp(dot + 1, "flac") || !strcasecmp(dot + 1, "mp3") ||
         !strcasecmp(dot + 1, "wav"))
         return 1;                                   /* music */
-    if (!strcasecmp(name, "cover.jpg") || !strcasecmp(name, "folder.jpg") ||
-        !strcasecmp(name, "cover.png"))
-        return 2;                                   /* folder art */
+    if (!strcasecmp(dot + 1, "jpg") || !strcasecmp(dot + 1, "jpeg") ||
+        !strcasecmp(dot + 1, "png"))
+        return 2;                                   /* folder art (any name) */
     return 0;
 }
 

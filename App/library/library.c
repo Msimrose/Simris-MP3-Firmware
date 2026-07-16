@@ -113,6 +113,22 @@ static bool has_ext(const char *name, const char *ext)
     return dot && strcasecmp(dot + 1, ext) == 0;
 }
 
+static bool is_image_name(const char *name)
+{
+    return has_ext(name, "jpg") || has_ext(name, "jpeg") ||
+           has_ext(name, "png");
+}
+
+static bool is_canonical_art(const char *name)
+{
+    return strcasecmp(name, "cover.jpg") == 0 ||
+           strcasecmp(name, "cover.jpeg") == 0 ||
+           strcasecmp(name, "cover.png") == 0 ||
+           strcasecmp(name, "folder.jpg") == 0 ||
+           strcasecmp(name, "folder.jpeg") == 0 ||
+           strcasecmp(name, "folder.png") == 0;
+}
+
 static void push_track(library_t *lib, const char *path, const char *folder_art)
 {
     track_t tr = {0};
@@ -150,16 +166,16 @@ static void scan_dir(library_t *lib, const char *dir, int depth)
     DIR *d = opendir(dir);
     if (!d) return;
 
-    /* pass 1: find folder art in this directory */
+    /* pass 1: folder art - canonical names win; else ANY image in the
+     * folder (WAV rips ship covers under arbitrary names) */
     char folder_art[1024] = "";
+    bool canon = false;
     struct dirent *e;
-    while ((e = readdir(d))) {
-        if (strcasecmp(e->d_name, "cover.jpg") == 0 ||
-            strcasecmp(e->d_name, "folder.jpg") == 0 ||
-            strcasecmp(e->d_name, "cover.png") == 0) {
+    while ((e = readdir(d)) && !canon) {
+        if (e->d_name[0] == '.' || !is_image_name(e->d_name)) continue;
+        canon = is_canonical_art(e->d_name);
+        if (canon || !folder_art[0])
             snprintf(folder_art, sizeof(folder_art), "%s/%s", dir, e->d_name);
-            break;
-        }
     }
     rewinddir(d);
 
@@ -203,16 +219,17 @@ static void scan_dir(library_t *lib, const char *dir, int depth)
         return;
     }
 
-    /* pass 1: find folder art in this directory */
-    while (f_readdir(&fr->dir, &fr->fno) == FR_OK && fr->fno.fname[0]) {
+    /* pass 1: folder art - canonical names win; else ANY image in the
+     * folder (WAV rips ship covers under arbitrary names) */
+    bool canon = false;
+    while (!canon && f_readdir(&fr->dir, &fr->fno) == FR_OK &&
+           fr->fno.fname[0]) {
         if (fr->fno.fattrib & AM_DIR) continue;
-        if (strcasecmp(fr->fno.fname, "cover.jpg") == 0 ||
-            strcasecmp(fr->fno.fname, "folder.jpg") == 0 ||
-            strcasecmp(fr->fno.fname, "cover.png") == 0) {
+        if (fr->fno.fname[0] == '.' || !is_image_name(fr->fno.fname)) continue;
+        canon = is_canonical_art(fr->fno.fname);
+        if (canon || !fr->folder_art[0])
             snprintf(fr->folder_art, sizeof(fr->folder_art), "%s/%s", dir,
                      fr->fno.fname);
-            break;
-        }
     }
     f_readdir(&fr->dir, NULL);   /* rewind */
 
