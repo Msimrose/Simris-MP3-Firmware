@@ -37,6 +37,8 @@ static const char *menu_items[] = {
 #define MENU_IDX_SETTINGS   5
 
 static lv_obj_t *menu_rows[MENU_COUNT];
+static lv_obj_t *menu_cov, *menu_t1, *menu_t2;   /* right pane, live */
+static size_t    menu_pane_track;
 static lv_obj_t *menu_labels[MENU_COUNT];
 static lv_obj_t *menu_chevrons[MENU_COUNT];
 static int       menu_sel;
@@ -288,6 +290,15 @@ void ui_play_track(size_t track_idx)
 {
     if (!ui_lib || track_idx >= ui_lib->count) return;
 
+    /* selecting the track that's already playing (or paused) just opens
+     * Now Playing - never restarts it */
+    engine_state_t st = audio_engine_state();
+    if (track_idx == ui_current_track &&
+        (st == ENGINE_PLAYING || st == ENGINE_PAUSED)) {
+        ui_show_nowplaying();
+        return;
+    }
+
     static uint32_t last_switch;
     uint32_t now = lv_tick_get();
     if (last_switch && now - last_switch < 350) return;
@@ -298,6 +309,32 @@ void ui_play_track(size_t track_idx)
     ui_seen_serial = audio_engine_track_serial();
     queue_next_in_album();
     if (ui_cur_screen == UI_SCR_NOWPLAYING) ui_show_nowplaying();
+}
+
+/* Menu right pane follows the live track (gapless advances included) */
+static void menu_pane_refresh(void)
+{
+    if (ui_cur_screen != UI_SCR_MENU) return;
+    if (!menu_t1 || !lv_obj_is_valid(menu_t1)) return;
+    if (ui_current_track == menu_pane_track || ui_current_track == UI_NO_TRACK)
+        return;
+    menu_pane_track = ui_current_track;
+
+    const track_t *tr = &ui_lib->tracks[ui_current_track];
+    lv_label_set_text(menu_t1, tr->t.title);
+    lv_label_set_text(menu_t2, tr->t.artist);
+
+    size_t alb = ui_album_of_track(ui_current_track);
+    const char *art = (ui_art_provider && alb != (size_t)-1)
+                          ? ui_art_provider(alb, 190) : NULL;
+    if (menu_cov && lv_obj_is_valid(menu_cov)) {
+        if (art) {
+            lv_image_set_src(menu_cov, art);
+            lv_obj_remove_flag(menu_cov, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(menu_cov, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 /* Half-second player tick: live progress + album auto-advance. Gapless
@@ -333,6 +370,7 @@ static void player_tick(lv_timer_t *t)
         finish_grace = 0;
     }
     ui_nowplaying_refresh();
+    menu_pane_refresh();
 }
 
 /* ---- split main menu (Figma 01 layout, 01c type scale) ------------------ */
@@ -452,31 +490,33 @@ void ui_show_menu(void)
         pane_title = ui_lib->albums[0].album;
         pane_sub = ui_lib->albums[0].artist;
     }
+    menu_cov = menu_t1 = menu_t2 = NULL;
+    menu_pane_track = ui_current_track;
     if (alb != (size_t)-1) {
         const char *art = ui_art_provider ? ui_art_provider(alb, 190) : NULL;
-        if (art) {
-            lv_obj_t *cov = lv_image_create(scr);
-            lv_image_set_src(cov, art);
-            lv_obj_set_size(cov, 190, 190);
-            lv_obj_set_pos(cov, 365, 100);
-            lv_obj_set_style_radius(cov, 5, 0);
-            lv_obj_set_style_clip_corner(cov, true, 0);
-        }
-        lv_obj_t *t1 = lv_label_create(scr);
-        lv_label_set_text(t1, pane_title ? pane_title : "");
-        lv_obj_set_style_text_font(t1, &diatype_medium_16, 0);
-        lv_obj_set_style_text_color(t1, PACT_COL_TEXT, 0);
-        lv_label_set_long_mode(t1, LV_LABEL_LONG_DOT);
-        lv_obj_set_size(t1, 210, 20);
-        lv_obj_set_pos(t1, 365, 308);
+        menu_cov = lv_image_create(scr);
+        lv_obj_set_size(menu_cov, 190, 190);
+        lv_obj_set_pos(menu_cov, 365, 100);
+        lv_obj_set_style_radius(menu_cov, 5, 0);
+        lv_obj_set_style_clip_corner(menu_cov, true, 0);
+        if (art) lv_image_set_src(menu_cov, art);
+        else     lv_obj_add_flag(menu_cov, LV_OBJ_FLAG_HIDDEN);
 
-        lv_obj_t *t2 = lv_label_create(scr);
-        lv_label_set_text(t2, pane_sub ? pane_sub : "");
-        lv_obj_set_style_text_font(t2, &diatype_light_13, 0);
-        lv_obj_set_style_text_color(t2, PACT_COL_TEXT_DIM, 0);
-        lv_label_set_long_mode(t2, LV_LABEL_LONG_DOT);
-        lv_obj_set_size(t2, 210, 18);
-        lv_obj_set_pos(t2, 365, 330);
+        menu_t1 = lv_label_create(scr);
+        lv_label_set_text(menu_t1, pane_title ? pane_title : "");
+        lv_obj_set_style_text_font(menu_t1, &diatype_medium_16, 0);
+        lv_obj_set_style_text_color(menu_t1, PACT_COL_TEXT, 0);
+        lv_label_set_long_mode(menu_t1, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(menu_t1, 210, 20);
+        lv_obj_set_pos(menu_t1, 365, 308);
+
+        menu_t2 = lv_label_create(scr);
+        lv_label_set_text(menu_t2, pane_sub ? pane_sub : "");
+        lv_obj_set_style_text_font(menu_t2, &diatype_light_13, 0);
+        lv_obj_set_style_text_color(menu_t2, PACT_COL_TEXT_DIM, 0);
+        lv_label_set_long_mode(menu_t2, LV_LABEL_LONG_DOT);
+        lv_obj_set_size(menu_t2, 210, 18);
+        lv_obj_set_pos(menu_t2, 365, 330);
     }
 
     menu_paint_selection();
