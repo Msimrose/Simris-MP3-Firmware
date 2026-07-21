@@ -73,8 +73,11 @@ what remains. Written at the end of the first major build push (branches
   keyed by first-track path hash. Carousel loads BMP twins to RAM
   (`pact_thumb_load_bmp`) because LVGL 9.4 cannot scale-transform
   file-sourced JPEGs.
-- Demo gallery: /tmp/pact-gallery (regenerate if /tmp purged: real covers +
-  symlinked real albums).
+- Library: **~/Music/pact-library** (permanent; the old /tmp/pact-gallery
+  demo got its files purged by macOS's 3-day /tmp cleanup on 2026-07-20 -
+  real albums recovered from ~/Downloads sources, placeholder demo albums
+  gone for good). ~/.pact_sim_lib points at it. The /tmp/pact_art thumb
+  cache is also volatile but regenerates on demand - harmless.
 
 ### Storage stack (host-VERIFIED on a disk image; SDMMC silicon at bring-up)
 - `App/pact_io.h` seam: host backend = stdio, device = FatFs. All decoders,
