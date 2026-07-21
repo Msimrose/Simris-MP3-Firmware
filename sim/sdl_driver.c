@@ -114,7 +114,7 @@ lv_display_t *pact_sdl_display_create(int32_t w, int32_t h, bool big)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     int win_w = big ? w : w / 2;
     int win_h = big ? h : h / 2;
-    win = SDL_CreateWindow("Pact MP-1", SDL_WINDOWPOS_CENTERED,
+    win = SDL_CreateWindow("Simris Audio Player", SDL_WINDOWPOS_CENTERED,
                            SDL_WINDOWPOS_CENTERED, win_w, win_h,
                            big ? 0 : SDL_WINDOW_ALLOW_HIGHDPI);
     ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);

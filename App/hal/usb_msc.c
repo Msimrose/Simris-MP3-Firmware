@@ -123,7 +123,7 @@ uint8_t const *tud_descriptor_other_speed_configuration_cb(uint8_t index)
 static const char *desc_strings[] = {
     NULL,                    /* 0: language (special-cased below) */
     "Simris",                /* 1 */
-    "Pact MP-1",             /* 2 */
+    "Simris Audio Player",   /* 2 */
     NULL,                    /* 3: serial from MCU UID */
 };
 
@@ -166,8 +166,8 @@ void tud_msc_inquiry_cb(uint8_t lun, uint8_t vendor_id[8],
                         uint8_t product_id[16], uint8_t product_rev[4])
 {
     memcpy(vendor_id, "Simris  ", 8);
-    memcpy(product_id, lun == 0 ? "Pact MP-1 eMMC  "
-                                : "Pact MP-1 SD    ", 16);
+    memcpy(product_id, lun == 0 ? "Audio Player    "
+                                : "Audio Player SD ", 16);
     memcpy(product_rev, "1.0 ", 4);
 }
 
